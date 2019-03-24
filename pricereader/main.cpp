@@ -1,0 +1,165 @@
+// https://github.com/Microsoft/cpprestsdk
+#include <cpprest/json.h>
+
+//https://github.com/gabime/spdlog
+#include <spdlog/spdlog.h>
+#include <spdlog/fmt/fmt.h>
+
+// https://github.com/jarro2783/cxxopts
+#include <cxxopts.hpp>
+
+//
+#include <regex>
+#include <optional>
+
+#include "../utils/otutils.h"
+
+using namespace utility;                    // Common utilities like string conversions
+using namespace web;                        // Common features like URIs.
+using namespace web::http;                  // Common HTTP functionality
+using namespace web::http::client;          // HTTP client features
+using namespace web::http::experimental::listener;
+
+static std::string 	apiKey;
+
+class MyHTTPServer: public utils::HTTPServer
+{
+public:
+	void get( http_request & request ) override
+	{
+		const std::string 	uri = request.request_uri().to_string();
+		const std::regex 	rgx("/value/(\\w+)");
+		std::smatch			match;
+
+		spdlog::debug( "{} {} from {}", request.method(), uri, request.remote_address() );
+
+		if( std::regex_search( uri.begin(), uri.end(), match, rgx )){
+			auto					spam = utils::newSpam( request, "read-symbol" );
+			const std::string		symbol = match[1];
+			std::optional<float> 	priceMaybe = getPrice( symbol, spam->context() );
+
+			if( apiKey.empty() ){
+				priceMaybe = getFakePrice( symbol, spam->context() );
+			}else{
+				priceMaybe = getPrice( symbol, spam->context() );
+			} 
+			if( priceMaybe ){
+				spam->SetTag( "http.status_code", status_codes::OK );
+
+				spdlog::debug( "Price for symbol {}: {}", symbol, priceMaybe.value() );
+				request.reply( status_codes::OK, fmt::format( "{{ \"value\": {} }}", priceMaybe.value() ), "application/json; charset=utf-8" );
+			}else{
+				spam->SetTag( "error", true );
+				spam->SetTag( "http.status_code", status_codes::NotFound );
+
+				spdlog::error( "No price for symbol {}", symbol );
+				request.reply( status_codes::NotFound, "{}", "application/json; charset=utf-8" );
+			}
+			spam->Finish();
+		}else{
+			spdlog::error( "Unknown route {}", uri );
+			request.reply( status_codes::NotFound, "{}", "application/json; charset=utf-8" );
+		}
+	}
+
+private:
+	std::optional<float> getFakePrice( const std::string & symbol, const opentracing::SpanContext & spamContext )
+	{
+		spdlog::debug( "Reading last value for symbol {}", symbol );
+
+		std::optional<float>	res;
+
+		if( symbol == "AAPL" ){
+			res = 191.05;
+		}else if( symbol == "FB" ){
+			res = 164.34;
+		}else if( symbol == "AMZN" ){
+			res = 1764.77;
+		}
+		return res;
+	}
+
+	std::optional<float> getPrice( const std::string & symbol, const opentracing::SpanContext & spamContext )
+	{
+		spdlog::debug( "Reading last value for symbol {}", symbol );
+
+		std::optional<float>	res;
+		const std::string 		query = fmt::format( "https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={}&apikey={}", symbol, apiKey );
+		client::http_client 	client( query );
+		http_request			req( methods::GET );
+
+		// I doubt that alphavantage uses OpenTracing :)
+		utils::injectContext( spamContext, req );
+
+		client.request( req ).then([](http_response response){
+			if( response.status_code() == status_codes::OK ){
+				return response.extract_json();
+			}else{
+				spdlog::error( "Error accessing the symbol price. Nothing returned. Error: {}", response.status_code() );
+				return pplx::task_from_result(json::value());
+			}
+		}).then([ &res ](pplx::task<json::value> previousTask){
+			try{
+				const auto jsonRes = previousTask.get();
+				if( jsonRes.has_field( "Global Quote" ) && jsonRes.at( "Global Quote" ).has_field( "05. price" ) ){
+					const auto jsonValue = jsonRes.at( "Global Quote" ).at( "05. price" );
+
+					if( !jsonValue.is_null() && (jsonValue.is_number() || jsonValue.is_string())){
+						if( jsonValue.is_number() ){
+							res = jsonValue.as_number().to_double();
+						}else{
+							res = std::stod( jsonValue.as_string() );
+						}
+					}else{
+						spdlog::error( "Error accessing the symbol price" );
+					}
+				}
+			}catch( const http_exception & e ){
+				spdlog::error( "Error accessing the symbol price {}", e.what() );
+			}catch(...){
+				spdlog::error( "Error accessing the symbol price" );
+			}
+		}).wait();
+
+		return res;
+	}
+};
+
+int main( int argc, char * argv[])
+{
+	cxxopts::Options 	options( argv[0], "Reads stock values." );
+	int					port = 0;
+	bool				verbose = false;
+
+ 	options
+	 	.positional_help("[optional args]")
+		.show_positional_help();
+
+	options.add_options()
+		("help", "Print help")
+		("api-key", "Alphavantage API Key", cxxopts::value<std::string>( apiKey ) )
+		("verbose", "Increase log level", cxxopts::value<bool>( verbose )->default_value("false") )
+		("p,port", "Port", cxxopts::value<int>( port )->default_value( "16002" ) );
+
+	try{
+		const auto result = options.parse(argc, argv);
+		if( result.count( "help" )){
+			std::cout << options.help({ "", "Group" }) << std::endl;
+			exit(0);
+		}
+	}catch(const cxxopts::OptionException& e){
+    	spdlog::critical( "error parsing options: {}", e.what() );
+    	exit(1);
+	}
+	if( verbose ){
+		spdlog::set_level(spdlog::level::debug);
+	}
+	if( apiKey.empty() ){
+		spdlog::warn( "No API Key, we will use dummy data." );
+	}
+	MyHTTPServer	server;
+
+	server.run( "price-reader", port );
+
+	return 0;
+}
