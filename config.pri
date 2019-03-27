@@ -3,6 +3,8 @@ APP_LFLAGS	= -rpath @executable_path -rpath @executable_path/libs
 
 QMAKE_LFLAGS += $${APP_LFLAGS}
 
+QMAKE_MACOSX_DEPLOYMENT_TARGET = 10.14
+
 CPPREST_INCL = $$QTDIR/extras/cpprestsdk/include
 CPPREST_LIBPATH = -L$$QTDIR/extras/cpprestsdk/lib
 CPPREST_LIB = -lcpprest
