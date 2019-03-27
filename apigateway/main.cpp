@@ -1,10 +1,6 @@
 // https://github.com/Microsoft/cpprestsdk
 #include <cpprest/json.h>
 
-//https://github.com/gabime/spdlog
-#include <spdlog/spdlog.h>
-#include <spdlog/fmt/fmt.h>
-
 // https://github.com/jarro2783/cxxopts
 #include <cxxopts.hpp>
 
@@ -23,7 +19,7 @@ using namespace web::http::experimental::listener;
 class MyHTTPServer: public utils::HTTPServer
 {
 public:
-	MyHTTPServer( int forePort, int pricePort )
+	explicit MyHTTPServer( int forePort, int pricePort, std::shared_ptr<spdlog::logger> logger ) : HTTPServer( logger )
 	{
 		mForecastingPort = forePort;
 		mPricePort = pricePort;
@@ -35,7 +31,7 @@ public:
 		const std::regex 		rgx("/forecasting/(\\w+)");
 		std::smatch 			match;
 
-		spdlog::debug( "{} {} from {}", request.method(), uri, request.remote_address() );
+		mLogger->debug( "{} {} from {}", request.method(), uri, request.remote_address() );
 
 		if( std::regex_search( uri.begin(), uri.end(), match, rgx )){
 			auto				spam = utils::newSpam( request, "read-forecasting" );
@@ -45,31 +41,31 @@ public:
 			spam->SetTag( "symbol", symbol );
 
 			if( priceMaybe ){
-				spdlog::debug( "Price for symbol {}: {}", symbol, priceMaybe.value() );
+				mLogger->debug( "Price for symbol {}: {}", symbol, priceMaybe.value() );
 
 				const auto foreMaybe = getForecasting( symbol, priceMaybe.value(), spam->context() );
 				if( foreMaybe ){
 					spam->SetTag( "http.status_code", status_codes::OK );
 
-					spdlog::debug( "Forecasting for symbol {}: {}", symbol, foreMaybe.value() );
+					mLogger->debug( "Forecasting for symbol {}: {}", symbol, foreMaybe.value() );
 					request.reply( status_codes::OK, fmt::format( "{{ \"value\": {} }}", foreMaybe.value() ), "application/json; charset=utf-8" );
 				}else{
 					spam->SetTag( "error", true );
 					spam->SetTag( "http.status_code", status_codes::NotFound );
 
-					spdlog::error( "No forecasting for symbol {}", symbol );
+					mLogger->error( "No forecasting for symbol {}", symbol );
 					request.reply( status_codes::NotFound, "{}", "application/json; charset=utf-8" );
 				}
 			}else{
 				spam->SetTag( "error", true );
 				spam->SetTag( "http.status_code", status_codes::NotFound );
 
-				spdlog::error( "No price for symbol {}", symbol );
+				mLogger->error( "No price for symbol {}", symbol );
 				request.reply( status_codes::NotFound, "{}", "application/json; charset=utf-8" );
 			}
 			spam->Finish();
 		}else{
-			spdlog::error( "Unknown route {}", uri );
+			mLogger->error( "Unknown route {}", uri );
 			request.reply( status_codes::NotFound, "{}", "application/json; charset=utf-8" );
 		}
 	}
@@ -80,7 +76,7 @@ private:
 
 	std::optional<float> getPrice( const std::string & symbol, const opentracing::SpanContext & spamContext )
 	{
-		spdlog::debug( "Reading last value for symbol {}", symbol );
+		mLogger->debug( "Reading last value for symbol {}", symbol );
 
 		std::optional<float>	res;
 		const std::string 		query = fmt::format( "http://localhost:{}/value/{}", mPricePort, symbol );
@@ -89,14 +85,14 @@ private:
 
 		utils::injectContext( spamContext, req );
 
-		client.request( req ).then([](http_response response){
+		client.request( req ).then([ this ](http_response response){
 			if( response.status_code() == status_codes::OK ){
 				return response.extract_json();
 			}else{
-				spdlog::error( "Error accessing the symbol price. No value found. Error: {}", response.status_code() );
+				mLogger->error( "Error accessing the symbol price. No value found. Error: {}", response.status_code() );
 				return pplx::task_from_result(json::value());
 			}
-		}).then([ &res ](pplx::task<json::value> previousTask){
+		}).then([ &res, this ](pplx::task<json::value> previousTask){
 			try{
 				const auto jsonRes = previousTask.get();
 
@@ -110,15 +106,15 @@ private:
 							res = std::stod( jsonValue.as_string() );
 						}
 					}else{
-						spdlog::error( "Error accessing the symbol price. Invalid response." );
+						mLogger->error( "Error accessing the symbol price. Invalid response." );
 					}
 				}else{
-					spdlog::error( "Error accessing the symbol price. No value found." );
+					mLogger->error( "Error accessing the symbol price. No value found." );
 				}
 			}catch( const http_exception & e ){
-				spdlog::error( "Error accessing the symbol price {}", e.what() );
+				mLogger->error( "Error accessing the symbol price {}", e.what() );
 			}catch(...){
-				spdlog::error( "Error accessing the symbol price" );
+				mLogger->error( "Error accessing the symbol price" );
 			}
 		}).wait();
 
@@ -127,7 +123,7 @@ private:
 
 	std::optional<float> getForecasting( const std::string & symbol, float currentValue, const opentracing::SpanContext & spamContext )
 	{
-		spdlog::debug( "Requesting forecasting for symbol {} at {}", symbol, currentValue );
+		mLogger->debug( "Requesting forecasting for symbol {} at {}", symbol, currentValue );
 
 		std::optional<float>	res;
 		const std::string 		query = fmt::format( "http://localhost:{}/forecasting?symbol={}&value={}", mForecastingPort, symbol, currentValue );
@@ -136,14 +132,14 @@ private:
 
 		utils::injectContext( spamContext, req );
 
-		client.request( req ).then([](http_response response){
+		client.request( req ).then([ this ](http_response response){
 			if( response.status_code() == status_codes::OK ){
 				return response.extract_json();
 			}else{
-				spdlog::error( "Error accessing the symbol forecasting. Error: {}", response.status_code() );
+				mLogger->error( "Error accessing the symbol forecasting. Error: {}", response.status_code() );
 				return pplx::task_from_result(json::value());
 			}
-		}).then([ &res ](pplx::task<json::value> previousTask){
+		}).then([ &res, this ](pplx::task<json::value> previousTask){
 			try{
 				const auto jsonRes = previousTask.get();
 				const auto jsonValue = jsonRes.at( "value" );
@@ -156,7 +152,7 @@ private:
 					}
 				}
 			}catch( const http_exception & e ){
-				spdlog::error( "Error accessing the symbol forecasting {}", e.what() );
+				mLogger->error( "Error accessing the symbol forecasting {}", e.what() );
 			}
 		}).wait();
 
@@ -171,6 +167,7 @@ int main( int argc, char * argv[])
 	bool				verbose = false;
 	int					forecastingPort = 0;
 	int 				pricePort = 0;
+	std::string			logFile;
 
  	options
 	 	.positional_help("[optional args]")
@@ -179,6 +176,7 @@ int main( int argc, char * argv[])
 	options.add_options()
 		("help", "Print help")
 		("verbose", "Increase log level", cxxopts::value<bool>( verbose )->default_value("false") )
+		("log-file", "Log file", cxxopts::value<std::string>( logFile ) )
 		("p,port", "Port", cxxopts::value<int>( port )->default_value( "16000" ) )
 		("forecasting-port", "Port for the forecasting service.", cxxopts::value<int>( forecastingPort )->default_value( "16001" ) )
 		("reader-port", "Port for the symbol reader service.", cxxopts::value<int>( pricePort )->default_value( "16002" ) );
@@ -193,10 +191,8 @@ int main( int argc, char * argv[])
     	spdlog::critical( "error parsing options: {}", e.what() );
     	exit(1);
 	}
-	if( verbose ){
-		spdlog::set_level(spdlog::level::debug);
-	}
-	MyHTTPServer	server( forecastingPort, pricePort );
+
+	MyHTTPServer	server( forecastingPort, pricePort, utils::newLogger( verbose, logFile ) );
 
 	server.run( "api-gateway", port );
 

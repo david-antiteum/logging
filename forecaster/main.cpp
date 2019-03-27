@@ -1,10 +1,6 @@
 // https://github.com/Microsoft/cpprestsdk
 #include <cpprest/json.h>
 
-//https://github.com/gabime/spdlog
-#include <spdlog/spdlog.h>
-#include <spdlog/fmt/fmt.h>
-
 // https://github.com/jarro2783/cxxopts
 #include <cxxopts.hpp>
 
@@ -22,11 +18,15 @@ using namespace web::http::experimental::listener;
 class MyHTTPServer: public utils::HTTPServer
 {
 public:
+	explicit MyHTTPServer( std::shared_ptr<spdlog::logger> logger ) : HTTPServer( logger )
+	{
+	}
+
 	void get( http_request & request ) override
 	{
 		const auto 			uri = request.request_uri();
 
-		spdlog::debug( "{} {} from {}", request.method(), uri.to_string(), request.remote_address() );
+		mLogger->debug( "{} {} from {}", request.method(), uri.to_string(), request.remote_address() );
 
 		if( uri.path() == "/forecasting" ){
 			auto		spam = utils::newSpam( request, "forecasting" );
@@ -37,25 +37,25 @@ public:
 				if( foreMaybe ){
 					spam->SetTag( "http.status_code", status_codes::OK );
 
-					spdlog::debug( "Forecasting for symbol {}: {}", query.at( "symbol" ), foreMaybe.value() );
+					mLogger->debug( "Forecasting for symbol {}: {}", query.at( "symbol" ), foreMaybe.value() );
 					request.reply( status_codes::OK, fmt::format( "{{ \"value\": {} }}", foreMaybe.value() ), "application/json; charset=utf-8" );
 				}else{
 					spam->SetTag( "error", true );
 					spam->SetTag( "http.status_code", status_codes::NotFound );
 
-					spdlog::error( "No forecasting for symbol {}", query.at( "symbol" ) );
+					mLogger->error( "No forecasting for symbol {}", query.at( "symbol" ) );
 					request.reply( status_codes::NotFound, "{}", "application/json; charset=utf-8" );
 				}
 			}else{
 				spam->SetTag( "error", true );
 				spam->SetTag( "http.status_code", status_codes::BadRequest );
 
-				spdlog::error( "Missing required parameters {}", uri.to_string() );
+				mLogger->error( "Missing required parameters {}", uri.to_string() );
 				request.reply( status_codes::BadRequest, "{}", "application/json; charset=utf-8" );
 			}
 			spam->Finish();
 		}else{
-			spdlog::error( "Unknown route {}", uri.to_string() );
+			mLogger->error( "Unknown route {}", uri.to_string() );
 			request.reply( status_codes::NotFound, "{}", "application/json; charset=utf-8" );
 		}
 	}
@@ -81,6 +81,7 @@ int main( int argc, char * argv[])
 	cxxopts::Options 	options( argv[0], "Forecaster service." );
 	int					port = 0;
 	bool				verbose = false;
+	std::string			logFile;
 
  	options
 	 	.positional_help("[optional args]")
@@ -89,6 +90,7 @@ int main( int argc, char * argv[])
 	options.add_options()
 		("help", "Print help")
 		("verbose", "Increase log level", cxxopts::value<bool>( verbose )->default_value("false") )
+		("log-file", "Log file", cxxopts::value<std::string>( logFile ) )
 		("p,port", "Port", cxxopts::value<int>( port )->default_value( "16001" ) );
 
 	try{
@@ -101,10 +103,8 @@ int main( int argc, char * argv[])
     	spdlog::critical( "error parsing options: {}", e.what() );
     	exit(1);
 	}
-	if( verbose ){
-		spdlog::set_level(spdlog::level::debug);
-	}
-	MyHTTPServer	server;
+
+	MyHTTPServer	server( utils::newLogger( verbose, logFile ) );
 
 	server.run( "forecaster", port );
 

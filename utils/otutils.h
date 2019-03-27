@@ -11,6 +11,12 @@
 #include <yaml-cpp/yaml.h>
 #pragma GCC diagnostic pop
 
+//https://github.com/gabime/spdlog
+#include <spdlog/spdlog.h>
+#include <spdlog/sinks/rotating_file_sink.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/fmt/fmt.h>
+
 namespace utils {
 
 static const std::string defaultOpenTracingConfig = "\
@@ -75,9 +81,28 @@ void injectContext( const opentracing::SpanContext & spamContext, web::http::htt
 	opentracing::Tracer::Global()->Inject( spamContext, utils::CPPRestHeaderWriter( request ) );
 }
 
+std::shared_ptr<spdlog::logger> newLogger( bool verbose, const std::string & logFile )
+{
+	std::shared_ptr<spdlog::logger> 	res;
+	std::vector<spdlog::sink_ptr> 		sinks;
+
+	sinks.push_back( std::make_shared<spdlog::sinks::stdout_color_sink_st>() );
+	if( !logFile.empty() ){
+		sinks.push_back( std::make_shared<spdlog::sinks::rotating_file_sink_mt>( logFile, 1048576 * 5, 3 ) );
+	}
+	res = std::make_shared<spdlog::logger>( "", sinks.begin(), sinks.end() );
+
+	if( verbose ){
+		res->set_level( spdlog::level::debug );
+	}
+	return res;
+}
+
 class HTTPServer
 {
 public:
+	explicit HTTPServer( std::shared_ptr<spdlog::logger> logger ) : mLogger( logger ) {}
+
 	virtual void get( web::http::http_request & request ) = 0;
 
 	void run( const std::string & name, int port )
@@ -90,27 +115,30 @@ public:
 		const std::string serverAddress = fmt::format("http://{0}:{1}", "127.0.0.1", port );
 		auto listener = std::make_unique<web::http::experimental::listener::http_listener>( serverAddress );
 
-		spdlog::debug( "Listener created." );
+		mLogger->debug( "Listener created." );
 
 		listener->support( web::http::methods::GET, [this]( web::http::http_request request ){
 			get( request );
 		});
 		try{
-			const auto listenerTask = listener->open().then([ serverAddress ]()
+			const auto listenerTask = listener->open().then([ serverAddress, this ]()
 			{
-				spdlog::info( "REST server running at {}.", serverAddress );
+				mLogger->info( "REST server running at {}.", serverAddress );
 			});
 			const auto result = listenerTask.wait();
 			if( result != pplx::completed ){
-				spdlog::critical( "REST server fails to start." );
+				mLogger->critical( "REST server fails to start." );
 			}
 		}catch( std::exception const& e ){
-			spdlog::critical( "REST server exception." );
+			mLogger->critical( "REST server exception." );
 		}
 		getchar();
 
-		spdlog::info( "REST server closed." );
+		mLogger->info( "REST server closed." );
 		opentracing::Tracer::Global()->Close();
 	}
+
+protected:
+	std::shared_ptr<spdlog::logger>		mLogger;
 };
 }
