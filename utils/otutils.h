@@ -15,7 +15,10 @@
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/rotating_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/sinks/base_sink.h>
 #include <spdlog/fmt/fmt.h>
+
+#include <chrono>
 
 namespace utils {
 
@@ -81,7 +84,86 @@ void injectContext( const opentracing::SpanContext & spamContext, web::http::htt
 	opentracing::Tracer::Global()->Inject( spamContext, utils::CPPRestHeaderWriter( request ) );
 }
 
-std::shared_ptr<spdlog::logger> newLogger( bool verbose, const std::string & logFile )
+template<typename Mutex>
+class graylog_sink : public spdlog::sinks::base_sink<Mutex>
+{
+public:
+	graylog_sink( const std::string & hostName, const std::string & graylogHost ) 
+		: mHostName( hostName )
+	{
+		mGraylogService = fmt::format( "{}/gelf", graylogHost );
+	}
+
+protected:
+	void sink_it_(const spdlog::details::log_msg& msg) override
+	{
+		if( msg.level != spdlog::level::level_enum::off ){
+			web::json::value 				logJSON;
+
+			logJSON["version"] = web::json::value::string( "1.1" );
+			logJSON["host"] = web::json::value::string( mHostName );
+			logJSON["short_message"] = web::json::value::string( fmt::format( msg.payload ) );
+			logJSON["timestamp"] = web::json::value::number( std::chrono::duration_cast<std::chrono::milliseconds>( msg.time.time_since_epoch() ).count() / 1000.0 );
+			logJSON["level"] = web::json::value::number( toLevel( msg.level ) );
+
+			web::http::client::http_client 	client( mGraylogService );
+			web::http::http_request			req( web::http::methods::POST );
+
+			req.headers().set_content_type( "application/json; charset=utf-8" );
+			req.set_body( logJSON );
+
+			auto response = client.request( req ).get();
+			if( response.status_code() != web::http::status_codes::OK && response.status_code() != web::http::status_codes::Accepted ){
+				spdlog::error("Error writting to graylog. Service: {}, error: {}", mGraylogService, response.status_code() );
+			}
+		}
+	}
+
+	void flush_() override 
+	{
+	}
+
+private:
+	std::string			mHostName;
+	std::string			mGraylogService;
+
+	int toLevel( spdlog::level::level_enum level ){
+		int grayLevel = 1;
+
+		switch( level )
+		{
+			case spdlog::level::level_enum::trace :
+				grayLevel = 7;
+			break;
+
+			case spdlog::level::level_enum::debug :
+				grayLevel = 7;
+			break;
+
+			case spdlog::level::level_enum::info :
+				grayLevel = 6;
+			break;
+
+			case spdlog::level::level_enum::warn :
+				grayLevel = 4;
+			break;
+
+			case spdlog::level::level_enum::err :
+				grayLevel = 3;
+			break;
+
+			case spdlog::level::level_enum::critical :
+				grayLevel = 2;
+			break;
+
+			default:
+			break;			
+		}
+		return grayLevel;
+	}
+};
+
+std::shared_ptr<spdlog::logger> newLogger( const std::string & appName, bool verbose, const std::string & logFile, const std::string & graylogHost )
 {
 	std::shared_ptr<spdlog::logger> 	res;
 	std::vector<spdlog::sink_ptr> 		sinks;
@@ -90,7 +172,10 @@ std::shared_ptr<spdlog::logger> newLogger( bool verbose, const std::string & log
 	if( !logFile.empty() ){
 		sinks.push_back( std::make_shared<spdlog::sinks::rotating_file_sink_mt>( logFile, 1048576 * 5, 3 ) );
 	}
-	res = std::make_shared<spdlog::logger>( "", sinks.begin(), sinks.end() );
+	if( !graylogHost.empty() ){
+		sinks.push_back( std::make_shared<graylog_sink<spdlog::details::null_mutex>>( appName, graylogHost ) );
+	}
+	res = std::make_shared<spdlog::logger>( appName, sinks.begin(), sinks.end() );
 
 	if( verbose ){
 		res->set_level( spdlog::level::debug );
@@ -141,4 +226,5 @@ public:
 protected:
 	std::shared_ptr<spdlog::logger>		mLogger;
 };
+
 }

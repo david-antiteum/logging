@@ -168,6 +168,7 @@ int main( int argc, char * argv[])
 	int					forecastingPort = 0;
 	int 				pricePort = 0;
 	std::string			logFile;
+	std::string			graylogHost;
 
  	options
 	 	.positional_help("[optional args]")
@@ -177,6 +178,7 @@ int main( int argc, char * argv[])
 		("help", "Print help")
 		("verbose", "Increase log level", cxxopts::value<bool>( verbose )->default_value("false") )
 		("log-file", "Log file", cxxopts::value<std::string>( logFile ) )
+		("graylog-host", "schema://host:port. Example: http://localhost:12201", cxxopts::value<std::string>( graylogHost ) )
 		("p,port", "Port", cxxopts::value<int>( port )->default_value( "16000" ) )
 		("forecasting-port", "Port for the forecasting service.", cxxopts::value<int>( forecastingPort )->default_value( "16001" ) )
 		("reader-port", "Port for the symbol reader service.", cxxopts::value<int>( pricePort )->default_value( "16002" ) );
@@ -192,7 +194,7 @@ int main( int argc, char * argv[])
     	exit(1);
 	}
 
-	MyHTTPServer	server( forecastingPort, pricePort, utils::newLogger( verbose, logFile ) );
+	MyHTTPServer	server( forecastingPort, pricePort, utils::newLogger( "api-gateway", verbose, logFile, graylogHost ) );
 
 	server.run( "api-gateway", port );
 

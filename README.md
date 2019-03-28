@@ -6,8 +6,8 @@ The code shows basic concepts and includes inefficient code, questionable constr
 
 The example has three services:
 - apigateway: calls the internal services. Has a single GET end point /forecasting/{SYMBOL}
-- pricereader: returns the price of a ticker symbol. GET end point /price/{SYMBOL}
-- forecaster: calculates the forecasting of a ticker symbol. GET end point /forecasting/{SYMBOL}
+- pricereader: returns the price of a ticker symbol. GET end point /value/{SYMBOL}
+- forecaster: calculates the forecasting of a ticker symbol. GET end point /forecasting?symbol={SYMBOL}&value={VALUE}
 
 The apigateway will receive the request, call the pricereader to get the last value and pass it to the forecaster. It wil return to the user the forecasted value.
 
@@ -33,7 +33,7 @@ Libraries installed by the user:
 - [openssl](https://www.openssl.org): OpenSSL is a robust, commercial-grade, and full-featured toolkit for the Transport Layer Security (TLS) and Secure Sockets Layer (SSL) protocols.
 - [yaml-cpp](https://github.com/jbeder/yaml-cpp): yaml-cpp is a YAML parser and emitter in C++ matching the YAML 1.2 spec.
 
-## Running
+## Running Jaeger
 
 Start Jaeger, either the docker image:
 
@@ -65,3 +65,21 @@ curl http://127.0.0.1:16000/forecasting/AMZN
 ```
 
 See the traces in [Jaeger UI](http://localhost:16686).
+
+## Running Graylog
+
+Start Graylog:
+
+```
+docker run --name mongo -d mongo:3
+docker run --name elasticsearch -e "http.host=0.0.0.0" -e "ES_JAVA_OPTS=-Xms512m -Xmx512m" -d docker.elastic.co/elasticsearch/elasticsearch-oss:6.6.1
+docker run --name graylog --link mongo --link elasticsearch -p 9000:9000 -p 12201:12201 -p 1514:1514 -e GRAYLOG_HTTP_EXTERNAL_URI="http://127.0.0.1:9000/" -d graylog/graylog:3.0.0-2
+```
+
+Create a new Global Input (System menu) of type GELF HTTP using port 12201.
+
+Start the services with the flag:
+
+```
+--graylog-host http://localhost:12201
+```

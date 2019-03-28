@@ -136,6 +136,7 @@ int main( int argc, char * argv[])
 	bool				verbose = false;
 	std::string			logFile;
 	std::string			apiKey;
+	std::string			graylogHost;
 
  	options
 	 	.positional_help("[optional args]")
@@ -146,6 +147,7 @@ int main( int argc, char * argv[])
 		("api-key", "Alphavantage API Key", cxxopts::value<std::string>( apiKey ) )
 		("verbose", "Increase log level", cxxopts::value<bool>( verbose )->default_value("false") )
 		("log-file", "Log file", cxxopts::value<std::string>( logFile ) )
+		("graylog-host", "schema://host:port. Example: http://localhost:12201", cxxopts::value<std::string>( graylogHost ) )
 		("p,port", "Port", cxxopts::value<int>( port )->default_value( "16002" ) );
 
 	try{
@@ -159,7 +161,7 @@ int main( int argc, char * argv[])
     	exit(1);
 	}
 
-	MyHTTPServer	server( apiKey, utils::newLogger( verbose, logFile ) );
+	MyHTTPServer	server( apiKey, utils::newLogger( "price-reader", verbose, logFile, graylogHost ) );
 
 	server.run( "price-reader", port );
 

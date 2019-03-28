@@ -82,6 +82,7 @@ int main( int argc, char * argv[])
 	int					port = 0;
 	bool				verbose = false;
 	std::string			logFile;
+	std::string			graylogHost;
 
  	options
 	 	.positional_help("[optional args]")
@@ -91,6 +92,7 @@ int main( int argc, char * argv[])
 		("help", "Print help")
 		("verbose", "Increase log level", cxxopts::value<bool>( verbose )->default_value("false") )
 		("log-file", "Log file", cxxopts::value<std::string>( logFile ) )
+		("graylog-host", "schema://host:port. Example: http://localhost:12201", cxxopts::value<std::string>( graylogHost ) )
 		("p,port", "Port", cxxopts::value<int>( port )->default_value( "16001" ) );
 
 	try{
@@ -104,7 +106,7 @@ int main( int argc, char * argv[])
     	exit(1);
 	}
 
-	MyHTTPServer	server( utils::newLogger( verbose, logFile ) );
+	MyHTTPServer	server( utils::newLogger( "forecaster", verbose, logFile, graylogHost ) );
 
 	server.run( "forecaster", port );
 
