@@ -29,31 +29,31 @@ public:
 		mLogger->debug( "{} {} from {}", request.method(), uri.to_string(), request.remote_address() );
 
 		if( uri.path() == "/forecasting" ){
-			auto		spam = utils::newSpam( request, "forecasting" );
+			auto		span = utils::newSpan( request, "forecasting" );
 			const auto	query = web::uri::split_query( uri.query() );
 
 			if( query.count( "symbol" ) > 0  && query.count( "value" ) > 0 ){
 				const auto foreMaybe = getForecasting( query.at( "symbol" ), std::stod( query.at( "value" ) ));
 				if( foreMaybe ){
-					spam->SetTag( "http.status_code", status_codes::OK );
+					span->SetTag( "http.status_code", status_codes::OK );
 
 					mLogger->debug( "Forecasting for symbol {}: {}", query.at( "symbol" ), foreMaybe.value() );
 					request.reply( status_codes::OK, fmt::format( "{{ \"value\": {} }}", foreMaybe.value() ), "application/json; charset=utf-8" );
 				}else{
-					spam->SetTag( "error", true );
-					spam->SetTag( "http.status_code", status_codes::NotFound );
+					span->SetTag( "error", true );
+					span->SetTag( "http.status_code", status_codes::NotFound );
 
 					mLogger->error( "No forecasting for symbol {}", query.at( "symbol" ) );
 					request.reply( status_codes::NotFound, "{}", "application/json; charset=utf-8" );
 				}
 			}else{
-				spam->SetTag( "error", true );
-				spam->SetTag( "http.status_code", status_codes::BadRequest );
+				span->SetTag( "error", true );
+				span->SetTag( "http.status_code", status_codes::BadRequest );
 
 				mLogger->error( "Missing required parameters {}", uri.to_string() );
 				request.reply( status_codes::BadRequest, "{}", "application/json; charset=utf-8" );
 			}
-			spam->Finish();
+			span->Finish();
 		}else{
 			mLogger->error( "Unknown route {}", uri.to_string() );
 			request.reply( status_codes::NotFound, "{}", "application/json; charset=utf-8" );

@@ -36,28 +36,28 @@ public:
 		mLogger->debug( "{} {} from {}", request.method(), uri, request.remote_address() );
 
 		if( std::regex_search( uri.begin(), uri.end(), match, rgx )){
-			auto					spam = utils::newSpam( request, "read-symbol" );
+			auto					span = utils::newSpan( request, "read-symbol" );
 			const std::string		symbol = match[1];
-			std::optional<float> 	priceMaybe = getPrice( symbol, spam->context() );
+			std::optional<float> 	priceMaybe = getPrice( symbol, span->context() );
 
 			if( mApiKey.empty() ){
-				priceMaybe = getFakePrice( symbol, spam->context() );
+				priceMaybe = getFakePrice( symbol, span->context() );
 			}else{
-				priceMaybe = getPrice( symbol, spam->context() );
+				priceMaybe = getPrice( symbol, span->context() );
 			} 
 			if( priceMaybe ){
-				spam->SetTag( "http.status_code", status_codes::OK );
+				span->SetTag( "http.status_code", status_codes::OK );
 
 				mLogger->debug( "Price for symbol {}: {}", symbol, priceMaybe.value() );
 				request.reply( status_codes::OK, fmt::format( "{{ \"value\": {} }}", priceMaybe.value() ), "application/json; charset=utf-8" );
 			}else{
-				spam->SetTag( "error", true );
-				spam->SetTag( "http.status_code", status_codes::NotFound );
+				span->SetTag( "error", true );
+				span->SetTag( "http.status_code", status_codes::NotFound );
 
 				mLogger->error( "No price for symbol {}", symbol );
 				request.reply( status_codes::NotFound, "{}", "application/json; charset=utf-8" );
 			}
-			spam->Finish();
+			span->Finish();
 		}else{
 			mLogger->error( "Unknown route {}", uri );
 			request.reply( status_codes::NotFound, "{}", "application/json; charset=utf-8" );
@@ -67,7 +67,7 @@ public:
 private:
 	std::string 	mApiKey;
 
-	std::optional<float> getFakePrice( const std::string & symbol, const opentracing::SpanContext & /*spamContext*/ )
+	std::optional<float> getFakePrice( const std::string & symbol, const opentracing::SpanContext & /*spanContext*/ )
 	{
 		mLogger->debug( "Reading last value for symbol {}", symbol );
 
@@ -83,7 +83,7 @@ private:
 		return res;
 	}
 
-	std::optional<float> getPrice( const std::string & symbol, const opentracing::SpanContext & spamContext )
+	std::optional<float> getPrice( const std::string & symbol, const opentracing::SpanContext & spanContext )
 	{
 		mLogger->debug( "Reading last value for symbol {}", symbol );
 
@@ -93,7 +93,7 @@ private:
 		http_request			req( methods::GET );
 
 		// I doubt that alphavantage uses OpenTracing :)
-		utils::injectContext( spamContext, req );
+		utils::injectContext( spanContext, req );
 
 		client.request( req ).then([this](http_response response){
 			if( response.status_code() == status_codes::OK ){

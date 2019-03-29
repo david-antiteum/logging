@@ -62,26 +62,26 @@ private:
 	web::http::http_request & mRequest;
 };
 
-std::unique_ptr<opentracing::Span> newSpam( const web::http::http_request & request, const std::string & name )
+std::unique_ptr<opentracing::Span> newSpan( const web::http::http_request & request, const std::string & name )
 {
-	std::unique_ptr<opentracing::Span>	spam;
+	std::unique_ptr<opentracing::Span>	span;
 	auto								parentContext = opentracing::Tracer::Global()->Extract( CPPRestHeaderReader( request ) );
 
 	if( parentContext ){
-		spam = opentracing::Tracer::Global()->StartSpan( name, { opentracing::ChildOf( parentContext.value().get() ) } );
+		span = opentracing::Tracer::Global()->StartSpan( name, { opentracing::ChildOf( parentContext.value().get() ) } );
 	}else{
-		spam = opentracing::Tracer::Global()->StartSpan( name );
+		span = opentracing::Tracer::Global()->StartSpan( name );
 	}
 	// https://opentracing.io/specification/conventions/
-	spam->SetTag( "http.method", request.method() );
-	spam->SetTag( "http.url", request.absolute_uri().to_string() );
+	span->SetTag( "http.method", request.method() );
+	span->SetTag( "http.url", request.absolute_uri().to_string() );
 
-	return spam;
+	return span;
 }
 
-void injectContext( const opentracing::SpanContext & spamContext, web::http::http_request & request )
+void injectContext( const opentracing::SpanContext & spanContext, web::http::http_request & request )
 {
-	opentracing::Tracer::Global()->Inject( spamContext, utils::CPPRestHeaderWriter( request ) );
+	opentracing::Tracer::Global()->Inject( spanContext, utils::CPPRestHeaderWriter( request ) );
 }
 
 template<typename Mutex>
