@@ -1,6 +1,3 @@
-// https://github.com/Microsoft/cpprestsdk
-#include <cpprest/json.h>
-
 // https://github.com/jarro2783/cxxopts
 #include <cxxopts.hpp>
 
