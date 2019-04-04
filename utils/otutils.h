@@ -3,6 +3,7 @@
 // https://github.com/Microsoft/cpprestsdk
 #include <cpprest/http_client.h>
 #include <cpprest/http_listener.h>
+#include <cpprest/json.h>
 
 // https://www.jaegertracing.io
 #pragma GCC diagnostic push
