@@ -33,6 +33,18 @@ Libraries installed by the user:
 - [openssl](https://www.openssl.org): OpenSSL is a robust, commercial-grade, and full-featured toolkit for the Transport Layer Security (TLS) and Secure Sockets Layer (SSL) protocols.
 - [yaml-cpp](https://github.com/jbeder/yaml-cpp): yaml-cpp is a YAML parser and emitter in C++ matching the YAML 1.2 spec.
 
+Deoendencies can be installed using vcpkg:
+
+```
+vcpkg install boost
+vcpkg install yaml-cpp
+vcpkg install nlohmann-json
+vcpkg install cpprestsdk
+vcpkg install thrift
+vcpkg install opentracing
+vcpkg install jaegertracing
+```
+
 ## Running Jaeger
 
 Start Jaeger, either the docker image:
