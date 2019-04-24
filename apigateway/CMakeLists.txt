@@ -7,10 +7,17 @@ project( apigateway )
 
 find_package( yaml-cpp CONFIG REQUIRED )
 find_package( cpprestsdk CONFIG REQUIRED )
-find_package( opentracing )
-find_package( jaegertracing )
+find_package( nlohmann_json CONFIG REQUIRED )
+find_package( OpenTracing CONFIG REQUIRED )
 
-link_libraries( cpprestsdk::cpprest)
+link_libraries( nlohmann_json cpprestsdk::cpprest OpenTracing::opentracing yaml-cpp )
+
+find_package( Thrift CONFIG )
+find_package( jaegertracing CONFIG )
+if( jaegertracing_FOUND )
+	add_compile_definitions( JAEGER_ENABLED )
+    link_libraries( jaegertracing::jaegertracing-static )
+endif()
 
 add_executable( ${PROJECT_NAME} main.cpp )
 set_target_properties( ${PROJECT_NAME}
