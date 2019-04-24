@@ -24,11 +24,11 @@ public:
 
 	void get( http_request & request ) override
 	{
-		const std::string 		uri = request.request_uri().to_string();
+		const std::string 		uri = utility::conversions::to_utf8string( request.request_uri().to_string() );
 		const std::regex 		rgx("/forecasting/(\\w+)");
 		std::smatch 			match;
 
-		mLogger->debug( "{} {} from {}", request.method(), uri, request.remote_address() );
+		mLogger->debug( "{} {} from {}", utility::conversions::to_utf8string( request.method() ), uri, utility::conversions::to_utf8string( request.remote_address() ));
 
 		if( std::regex_search( uri.begin(), uri.end(), match, rgx )){
 			auto				span = utils::newSpan( request, "read-forecasting" );
@@ -77,7 +77,7 @@ private:
 
 		std::optional<float>	res;
 		const std::string 		query = fmt::format( "http://localhost:{}/value/{}", mPricePort, symbol );
-		client::http_client 	client( query );
+		client::http_client 	client( utility::conversions::to_string_t( query ));
 		http_request			req( methods::GET );
 
 		utils::injectContext( spanContext, req );
@@ -93,8 +93,8 @@ private:
 			try{
 				const auto jsonRes = previousTask.get();
 
-				if( jsonRes.has_field( "value" ) ){
-					const auto jsonValue = jsonRes.at( "value" );
+				if( jsonRes.has_field( utility::conversions::to_string_t( "value" )) ){
+					const auto jsonValue = jsonRes.at( utility::conversions::to_string_t( "value" ));
 
 					if( !jsonValue.is_null() && (jsonValue.is_number() || jsonValue.is_string())){
 						if( jsonValue.is_number() ){
@@ -124,7 +124,7 @@ private:
 
 		std::optional<float>	res;
 		const std::string 		query = fmt::format( "http://localhost:{}/forecasting?symbol={}&value={}", mForecastingPort, symbol, currentValue );
-		client::http_client 	client( query );
+		client::http_client 	client( utility::conversions::to_string_t( query ));
 		http_request			req( methods::GET );
 
 		utils::injectContext( spanContext, req );
@@ -139,7 +139,7 @@ private:
 		}).then([ &res, this ](pplx::task<json::value> previousTask){
 			try{
 				const auto jsonRes = previousTask.get();
-				const auto jsonValue = jsonRes.at( "value" );
+				const auto jsonValue = jsonRes.at( utility::conversions::to_string_t( "value" ));
 
 				if( !jsonValue.is_null() && (jsonValue.is_number() || jsonValue.is_string())){
 					if( jsonValue.is_number() ){

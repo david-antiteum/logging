@@ -5,12 +5,18 @@
 #include <cpprest/http_listener.h>
 #include <cpprest/json.h>
 
+#ifdef _JAEGER_ENABLED
 // https://www.jaegertracing.io
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <jaegertracing/Tracer.h>
-#include <yaml-cpp/yaml.h>
 #pragma GCC diagnostic pop
+#else
+#include <opentracing/tracer.h>
+#include <opentracing/span.h>
+#endif
+
+#include <yaml-cpp/yaml.h>
 
 //https://github.com/gabime/spdlog
 #include <spdlog/spdlog.h>
@@ -39,7 +45,7 @@ public:
 	opentracing::expected<void> ForeachKey( std::function<opentracing::expected<void>(opentracing::string_view key, opentracing::string_view value)> f) const override
 	{
 		for( auto iter: mRequest.headers() ){
-			f( iter.first, iter.second );
+			f( utility::conversions::to_utf8string( iter.first ), utility::conversions::to_utf8string( iter.second ) );
 		}
 		return {};
 	}
@@ -55,7 +61,7 @@ public:
 
 	opentracing::expected<void> Set( opentracing::string_view key, opentracing::string_view value ) const override
 	{
-		mRequest.headers().add( key, value );
+		mRequest.headers().add( utility::conversions::to_string_t(key), utility::conversions::to_string_t(value) );
 		return {};
 	}
 
@@ -74,8 +80,8 @@ std::unique_ptr<opentracing::Span> newSpan( const web::http::http_request & requ
 		span = opentracing::Tracer::Global()->StartSpan( name );
 	}
 	// https://opentracing.io/specification/conventions/
-	span->SetTag( "http.method", request.method() );
-	span->SetTag( "http.url", request.absolute_uri().to_string() );
+	span->SetTag( "http.method", utility::conversions::to_utf8string( request.method() ));
+	span->SetTag( "http.url", utility::conversions::to_utf8string( request.absolute_uri().to_string() ));
 
 	return span;
 }
@@ -101,16 +107,16 @@ protected:
 		if( msg.level != spdlog::level::level_enum::off ){
 			web::json::value 				logJSON;
 
-			logJSON["version"] = web::json::value::string( "1.1" );
-			logJSON["host"] = web::json::value::string( mHostName );
-			logJSON["short_message"] = web::json::value::string( fmt::format( msg.payload ) );
-			logJSON["timestamp"] = web::json::value::number( std::chrono::duration_cast<std::chrono::milliseconds>( msg.time.time_since_epoch() ).count() / 1000.0 );
-			logJSON["level"] = web::json::value::number( toLevel( msg.level ) );
+			logJSON[U("version")] = web::json::value::string( U("1.1") );
+			logJSON[U("host")] = web::json::value::string( utility::conversions::to_string_t(mHostName ));
+			logJSON[U("short_message")] = web::json::value::string( utility::conversions::to_string_t(fmt::format( msg.payload ) ));
+			logJSON[U("timestamp")] = web::json::value::number( std::chrono::duration_cast<std::chrono::milliseconds>( msg.time.time_since_epoch() ).count() / 1000.0 );
+			logJSON[U("level")] = web::json::value::number( toLevel( msg.level ) );
 
-			web::http::client::http_client 	client( mGraylogService );
+			web::http::client::http_client 	client( utility::conversions::to_string_t(mGraylogService) );
 			web::http::http_request			req( web::http::methods::POST );
 
-			req.headers().set_content_type( "application/json; charset=utf-8" );
+			req.headers().set_content_type( U("application/json; charset=utf-8") );
 			req.set_body( logJSON );
 
 			auto response = client.request( req ).get();
@@ -194,12 +200,13 @@ public:
 	void run( const std::string & name, int port )
 	{
 		YAML::Node configYAML = YAML::Load( utils::defaultOpenTracingConfig );
+#ifdef _JAEGER_ENABLED		
 		auto config = jaegertracing::Config::parse( configYAML );
 		auto tracer = jaegertracing::Tracer::make( name, config, jaegertracing::logging::consoleLogger());
 		opentracing::Tracer::InitGlobal( std::static_pointer_cast<opentracing::Tracer>(tracer) );
-
+#endif
 		const std::string serverAddress = fmt::format("http://{0}:{1}", "127.0.0.1", port );
-		auto listener = std::make_unique<web::http::experimental::listener::http_listener>( serverAddress );
+		auto listener = std::make_unique<web::http::experimental::listener::http_listener>( utility::conversions::to_string_t(serverAddress ));
 
 		mLogger->debug( "Listener created." );
 

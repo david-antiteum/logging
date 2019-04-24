@@ -23,36 +23,38 @@ public:
 	{
 		const auto 			uri = request.request_uri();
 
-		mLogger->debug( "{} {} from {}", request.method(), uri.to_string(), request.remote_address() );
+		mLogger->debug( "{} {} from {}", utility::conversions::to_utf8string( request.method() ), utility::conversions::to_utf8string( uri.to_string() ), utility::conversions::to_utf8string( request.remote_address() ));
 
-		if( uri.path() == "/forecasting" ){
+		if( uri.path() == utility::conversions::to_string_t( "/forecasting" )){
 			auto		span = utils::newSpan( request, "forecasting" );
 			const auto	query = web::uri::split_query( uri.query() );
 
-			if( query.count( "symbol" ) > 0  && query.count( "value" ) > 0 ){
-				const auto foreMaybe = getForecasting( query.at( "symbol" ), std::stod( query.at( "value" ) ));
+			if( query.count( utility::conversions::to_string_t( "symbol" )) > 0  && query.count( utility::conversions::to_string_t( "value" )) > 0 ){
+				auto symbol = utility::conversions::to_utf8string( query.at( utility::conversions::to_string_t( "symbol" )));
+
+				const auto foreMaybe = getForecasting( symbol, std::stod( utility::conversions::to_utf8string( query.at( utility::conversions::to_string_t( "value" )) )));
 				if( foreMaybe ){
 					span->SetTag( "http.status_code", status_codes::OK );
 
-					mLogger->debug( "Forecasting for symbol {}: {}", query.at( "symbol" ), foreMaybe.value() );
+					mLogger->debug( "Forecasting for symbol {}: {}", symbol, foreMaybe.value() );
 					request.reply( status_codes::OK, fmt::format( "{{ \"value\": {} }}", foreMaybe.value() ), "application/json; charset=utf-8" );
 				}else{
 					span->SetTag( "error", true );
 					span->SetTag( "http.status_code", status_codes::NotFound );
 
-					mLogger->error( "No forecasting for symbol {}", query.at( "symbol" ) );
+					mLogger->error( "No forecasting for symbol {}", symbol );
 					request.reply( status_codes::NotFound, "{}", "application/json; charset=utf-8" );
 				}
 			}else{
 				span->SetTag( "error", true );
 				span->SetTag( "http.status_code", status_codes::BadRequest );
 
-				mLogger->error( "Missing required parameters {}", uri.to_string() );
+				mLogger->error( "Missing required parameters {}", utility::conversions::to_utf8string( uri.to_string() ));
 				request.reply( status_codes::BadRequest, "{}", "application/json; charset=utf-8" );
 			}
 			span->Finish();
 		}else{
-			mLogger->error( "Unknown route {}", uri.to_string() );
+			mLogger->error( "Unknown route {}", utility::conversions::to_utf8string( uri.to_string() ));
 			request.reply( status_codes::NotFound, "{}", "application/json; charset=utf-8" );
 		}
 	}
