@@ -26,11 +26,11 @@ public:
 
 	void get( http_request & request ) override
 	{
-		const std::string 	uri = request.request_uri().to_string();
+		const std::string 	uri = utility::conversions::to_utf8string( request.request_uri().to_string() );
 		const std::regex 	rgx("/value/(\\w+)");
 		std::smatch			match;
 
-		mLogger->debug( "{} {} from {}", request.method(), uri, request.remote_address() );
+		mLogger->debug( "{} {} from {}", utility::conversions::to_utf8string( request.method() ), uri, utility::conversions::to_utf8string( request.remote_address() ));
 
 		if( std::regex_search( uri.begin(), uri.end(), match, rgx )){
 			auto					span = utils::newSpan( request, "read-symbol" );
@@ -86,7 +86,7 @@ private:
 
 		std::optional<float>	res;
 		const std::string 		query = fmt::format( "https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={}&apikey={}", symbol, mApiKey );
-		client::http_client 	client( query );
+		client::http_client 	client( utility::conversions::to_string_t( query ));
 		http_request			req( methods::GET );
 
 		// I doubt that alphavantage uses OpenTracing :)
@@ -102,8 +102,8 @@ private:
 		}).then([ &res, this ](pplx::task<json::value> previousTask){
 			try{
 				const auto jsonRes = previousTask.get();
-				if( jsonRes.has_field( "Global Quote" ) && jsonRes.at( "Global Quote" ).has_field( "05. price" ) ){
-					const auto jsonValue = jsonRes.at( "Global Quote" ).at( "05. price" );
+				if( jsonRes.has_field( utility::conversions::to_string_t( "Global Quote" ) ) && jsonRes.at( utility::conversions::to_string_t( "Global Quote" ) ).has_field( utility::conversions::to_string_t( "05. price" )) ){
+					const auto jsonValue = jsonRes.at( utility::conversions::to_string_t( "Global Quote" ) ).at( utility::conversions::to_string_t( "05. price" ));
 
 					if( !jsonValue.is_null() && (jsonValue.is_number() || jsonValue.is_string())){
 						if( jsonValue.is_number() ){
