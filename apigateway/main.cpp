@@ -4,8 +4,11 @@
 //
 #include <regex>
 #include <optional>
+#include <chrono>
+#include <thread>
 
 #include "../utils/otutils.h"
+#include "../utils/consul_client.h"
 
 using namespace utility;                    // Common utilities like string conversions
 using namespace web;                        // Common features like URIs.
@@ -22,48 +25,83 @@ public:
 		mPricePort = pricePort;
 	}
 
+	void discover()
+	{
+		consul::Services	services;
+		int					forePort = 0;
+		int					pricePort = 0;
+
+		using namespace std::chrono_literals;
+
+		while( forePort == 0 || pricePort == 0 ){
+			mLogger->debug( "Looking for services..." );
+			if( forePort == 0 ){
+				if( auto forecaster = services.get( "forecaster" ); forecaster ){
+					forePort = forecaster.value().mPort;
+					mLogger->debug( "Forecaster found in port {}", forePort );
+				}
+			}
+			if( pricePort == 0 ){
+				if( auto priceReader = services.get( "price-reader" ); priceReader ){
+					pricePort = priceReader.value().mPort;
+					mLogger->debug( "Price Reader found in port {}", pricePort );
+				}
+			}
+			if( forePort == 0 || pricePort == 0 ){
+				std::this_thread::sleep_for( 1s );
+			}
+		}
+		mForecastingPort = forePort;
+		mPricePort = pricePort;		
+	}
+
 	void get( http_request & request ) override
 	{
 		const std::string 		uri = utility::conversions::to_utf8string( request.request_uri().to_string() );
-		const std::regex 		rgx("/forecasting/(\\w+)");
-		std::smatch 			match;
 
 		mLogger->debug( "{} {} from {}", utility::conversions::to_utf8string( request.method() ), uri, utility::conversions::to_utf8string( request.remote_address() ));
 
-		if( std::regex_search( uri.begin(), uri.end(), match, rgx )){
-			auto				span = utils::newSpan( request, "read-forecasting" );
-			const std::string	symbol = match[1];
-			const auto 			priceMaybe = getPrice( symbol, span->context() );
+		if( uri == "/ping" ){
+			request.reply( status_codes::OK, "{}", "application/json; charset=utf-8" );
+		}else{
+			const std::regex 		rgx("/forecasting/(\\w+)");
+			std::smatch 			match;
 
-			span->SetTag( "symbol", symbol );
+			if( std::regex_search( uri.begin(), uri.end(), match, rgx )){
+				auto				span = utils::newSpan( request, "read-forecasting" );
+				const std::string	symbol = match[1];
+				const auto 			priceMaybe = getPrice( symbol, span->context() );
 
-			if( priceMaybe ){
-				mLogger->debug( "Price for symbol {}: {}", symbol, priceMaybe.value() );
+				span->SetTag( "symbol", symbol );
 
-				const auto foreMaybe = getForecasting( symbol, priceMaybe.value(), span->context() );
-				if( foreMaybe ){
-					span->SetTag( "http.status_code", status_codes::OK );
+				if( priceMaybe ){
+					mLogger->debug( "Price for symbol {}: {}", symbol, priceMaybe.value() );
 
-					mLogger->debug( "Forecasting for symbol {}: {}", symbol, foreMaybe.value() );
-					request.reply( status_codes::OK, fmt::format( "{{ \"value\": {} }}", foreMaybe.value() ), "application/json; charset=utf-8" );
+					const auto foreMaybe = getForecasting( symbol, priceMaybe.value(), span->context() );
+					if( foreMaybe ){
+						span->SetTag( "http.status_code", status_codes::OK );
+
+						mLogger->debug( "Forecasting for symbol {}: {}", symbol, foreMaybe.value() );
+						request.reply( status_codes::OK, fmt::format( "{{ \"value\": {} }}", foreMaybe.value() ), "application/json; charset=utf-8" );
+					}else{
+						span->SetTag( "error", true );
+						span->SetTag( "http.status_code", status_codes::NotFound );
+
+						mLogger->error( "No forecasting for symbol {}", symbol );
+						request.reply( status_codes::NotFound, "{}", "application/json; charset=utf-8" );
+					}
 				}else{
 					span->SetTag( "error", true );
 					span->SetTag( "http.status_code", status_codes::NotFound );
 
-					mLogger->error( "No forecasting for symbol {}", symbol );
+					mLogger->error( "No price for symbol {}", symbol );
 					request.reply( status_codes::NotFound, "{}", "application/json; charset=utf-8" );
 				}
+				span->Finish();
 			}else{
-				span->SetTag( "error", true );
-				span->SetTag( "http.status_code", status_codes::NotFound );
-
-				mLogger->error( "No price for symbol {}", symbol );
+				mLogger->error( "Unknown route {}", uri );
 				request.reply( status_codes::NotFound, "{}", "application/json; charset=utf-8" );
 			}
-			span->Finish();
-		}else{
-			mLogger->error( "Unknown route {}", uri );
-			request.reply( status_codes::NotFound, "{}", "application/json; charset=utf-8" );
 		}
 	}
 
@@ -159,7 +197,7 @@ private:
 
 int main( int argc, char * argv[])
 {
-	cxxopts::Options 	options( argv[0], "One line description of MyProgram" );
+	cxxopts::Options 	options( argv[0], "API Gateway" );
 	int					port = 0;
 	bool				verbose = false;
 	int					forecastingPort = 0;
@@ -193,6 +231,7 @@ int main( int argc, char * argv[])
 
 	MyHTTPServer	server( forecastingPort, pricePort, utils::newLogger( "api-gateway", verbose, logFile, graylogHost ) );
 
+	server.discover();
 	server.run( "api-gateway", port );
 
 	return 0;

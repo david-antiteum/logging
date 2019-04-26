@@ -27,37 +27,42 @@ public:
 	void get( http_request & request ) override
 	{
 		const std::string 	uri = utility::conversions::to_utf8string( request.request_uri().to_string() );
-		const std::regex 	rgx("/value/(\\w+)");
-		std::smatch			match;
 
 		mLogger->debug( "{} {} from {}", utility::conversions::to_utf8string( request.method() ), uri, utility::conversions::to_utf8string( request.remote_address() ));
 
-		if( std::regex_search( uri.begin(), uri.end(), match, rgx )){
-			auto					span = utils::newSpan( request, "read-symbol" );
-			const std::string		symbol = match[1];
-			std::optional<float> 	priceMaybe = getPrice( symbol, span->context() );
+		if( uri == "/ping" ){
+			request.reply( status_codes::OK, "{}", "application/json; charset=utf-8" );
+		}else{
+			const std::regex 	rgx("/value/(\\w+)");
+			std::smatch			match;
 
-			if( mApiKey.empty() ){
-				priceMaybe = getFakePrice( symbol, span->context() );
+			if( std::regex_search( uri.begin(), uri.end(), match, rgx )){
+				auto					span = utils::newSpan( request, "read-symbol" );
+				const std::string		symbol = match[1];
+				std::optional<float> 	priceMaybe = getPrice( symbol, span->context() );
+
+				if( mApiKey.empty() ){
+					priceMaybe = getFakePrice( symbol, span->context() );
+				}else{
+					priceMaybe = getPrice( symbol, span->context() );
+				} 
+				if( priceMaybe ){
+					span->SetTag( "http.status_code", status_codes::OK );
+
+					mLogger->debug( "Price for symbol {}: {}", symbol, priceMaybe.value() );
+					request.reply( status_codes::OK, fmt::format( "{{ \"value\": {} }}", priceMaybe.value() ), "application/json; charset=utf-8" );
+				}else{
+					span->SetTag( "error", true );
+					span->SetTag( "http.status_code", status_codes::NotFound );
+
+					mLogger->error( "No price for symbol {}", symbol );
+					request.reply( status_codes::NotFound, "{}", "application/json; charset=utf-8" );
+				}
+				span->Finish();
 			}else{
-				priceMaybe = getPrice( symbol, span->context() );
-			} 
-			if( priceMaybe ){
-				span->SetTag( "http.status_code", status_codes::OK );
-
-				mLogger->debug( "Price for symbol {}: {}", symbol, priceMaybe.value() );
-				request.reply( status_codes::OK, fmt::format( "{{ \"value\": {} }}", priceMaybe.value() ), "application/json; charset=utf-8" );
-			}else{
-				span->SetTag( "error", true );
-				span->SetTag( "http.status_code", status_codes::NotFound );
-
-				mLogger->error( "No price for symbol {}", symbol );
+				mLogger->error( "Unknown route {}", uri );
 				request.reply( status_codes::NotFound, "{}", "application/json; charset=utf-8" );
 			}
-			span->Finish();
-		}else{
-			mLogger->error( "Unknown route {}", uri );
-			request.reply( status_codes::NotFound, "{}", "application/json; charset=utf-8" );
 		}
 	}
 
