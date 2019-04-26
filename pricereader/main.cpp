@@ -6,6 +6,7 @@
 #include <optional>
 
 #include "../utils/otutils.h"
+#include "../utils/server.h"
 
 using namespace utility;                    // Common utilities like string conversions
 using namespace web;                        // Common features like URIs.
@@ -139,12 +140,14 @@ int main( int argc, char * argv[])
 	std::string			logFile;
 	std::string			apiKey;
 	std::string			graylogHost;
+	std::string			group;
 
  	options
 	 	.positional_help("[optional args]")
 		.show_positional_help();
 
 	options.add_options()
+		("g,group", "service group", cxxopts::value<std::string>( group ) )
 		("help", "Print help")
 		("api-key", "Alphavantage API Key", cxxopts::value<std::string>( apiKey ) )
 		("verbose", "Increase log level", cxxopts::value<bool>( verbose )->default_value("false") )
@@ -165,6 +168,9 @@ int main( int argc, char * argv[])
 
 	MyHTTPServer	server( apiKey, utils::newLogger( "price-reader", verbose, logFile, graylogHost ) );
 
+	if( !group.empty() ){
+		server.setGroup( group );
+	}
 	server.run( "price-reader", port );
 
 	return 0;

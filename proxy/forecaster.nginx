@@ -1,0 +1,12 @@
+upstream forecaster {
+	server localhost:16000;
+	server localhost:17000 backup;
+}
+
+server {
+	listen 15000;
+
+	location / {
+		proxy_pass http://forecaster;
+	}
+}
