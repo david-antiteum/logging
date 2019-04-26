@@ -25,37 +25,41 @@ public:
 
 		mLogger->debug( "{} {} from {}", utility::conversions::to_utf8string( request.method() ), utility::conversions::to_utf8string( uri.to_string() ), utility::conversions::to_utf8string( request.remote_address() ));
 
-		if( uri.path() == utility::conversions::to_string_t( "/forecasting" )){
-			auto		span = utils::newSpan( request, "forecasting" );
-			const auto	query = web::uri::split_query( uri.query() );
+		if( uri.path() == utility::conversions::to_string_t( "/ping" )){
+			request.reply( status_codes::OK, "{}", "application/json; charset=utf-8" );
+		}else{
+			if( uri.path() == utility::conversions::to_string_t( "/forecasting" )){
+				auto		span = utils::newSpan( request, "forecasting" );
+				const auto	query = web::uri::split_query( uri.query() );
 
-			if( query.count( utility::conversions::to_string_t( "symbol" )) > 0  && query.count( utility::conversions::to_string_t( "value" )) > 0 ){
-				auto symbol = utility::conversions::to_utf8string( query.at( utility::conversions::to_string_t( "symbol" )));
+				if( query.count( utility::conversions::to_string_t( "symbol" )) > 0  && query.count( utility::conversions::to_string_t( "value" )) > 0 ){
+					auto symbol = utility::conversions::to_utf8string( query.at( utility::conversions::to_string_t( "symbol" )));
 
-				const auto foreMaybe = getForecasting( symbol, std::stod( utility::conversions::to_utf8string( query.at( utility::conversions::to_string_t( "value" )) )));
-				if( foreMaybe ){
-					span->SetTag( "http.status_code", status_codes::OK );
+					const auto foreMaybe = getForecasting( symbol, std::stod( utility::conversions::to_utf8string( query.at( utility::conversions::to_string_t( "value" )) )));
+					if( foreMaybe ){
+						span->SetTag( "http.status_code", status_codes::OK );
 
-					mLogger->debug( "Forecasting for symbol {}: {}", symbol, foreMaybe.value() );
-					request.reply( status_codes::OK, fmt::format( "{{ \"value\": {} }}", foreMaybe.value() ), "application/json; charset=utf-8" );
+						mLogger->debug( "Forecasting for symbol {}: {}", symbol, foreMaybe.value() );
+						request.reply( status_codes::OK, fmt::format( "{{ \"value\": {} }}", foreMaybe.value() ), "application/json; charset=utf-8" );
+					}else{
+						span->SetTag( "error", true );
+						span->SetTag( "http.status_code", status_codes::NotFound );
+
+						mLogger->error( "No forecasting for symbol {}", symbol );
+						request.reply( status_codes::NotFound, "{}", "application/json; charset=utf-8" );
+					}
 				}else{
 					span->SetTag( "error", true );
-					span->SetTag( "http.status_code", status_codes::NotFound );
+					span->SetTag( "http.status_code", status_codes::BadRequest );
 
-					mLogger->error( "No forecasting for symbol {}", symbol );
-					request.reply( status_codes::NotFound, "{}", "application/json; charset=utf-8" );
+					mLogger->error( "Missing required parameters {}", utility::conversions::to_utf8string( uri.to_string() ));
+					request.reply( status_codes::BadRequest, "{}", "application/json; charset=utf-8" );
 				}
+				span->Finish();
 			}else{
-				span->SetTag( "error", true );
-				span->SetTag( "http.status_code", status_codes::BadRequest );
-
-				mLogger->error( "Missing required parameters {}", utility::conversions::to_utf8string( uri.to_string() ));
-				request.reply( status_codes::BadRequest, "{}", "application/json; charset=utf-8" );
+				mLogger->error( "Unknown route {}", utility::conversions::to_utf8string( uri.to_string() ));
+				request.reply( status_codes::NotFound, "{}", "application/json; charset=utf-8" );
 			}
-			span->Finish();
-		}else{
-			mLogger->error( "Unknown route {}", utility::conversions::to_utf8string( uri.to_string() ));
-			request.reply( status_codes::NotFound, "{}", "application/json; charset=utf-8" );
 		}
 	}
 

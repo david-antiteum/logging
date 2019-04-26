@@ -1,5 +1,9 @@
 #pragma once
 
+#include <csignal>
+#include <chrono>
+#include <thread>
+
 // https://github.com/Microsoft/cpprestsdk
 #include <cpprest/http_client.h>
 #include <cpprest/http_listener.h>
@@ -26,6 +30,8 @@
 #include <spdlog/fmt/fmt.h>
 
 #include <chrono>
+
+#include "consul_client.h"
 
 namespace utils {
 
@@ -225,7 +231,19 @@ public:
 		}catch( std::exception const& e ){
 			mLogger->critical( "REST server exception." );
 		}
-		getchar();
+		
+		std::signal( SIGINT, HTTPServer::signalHandler );
+
+		// All set, register service
+		consul::Services	services;
+
+		using namespace std::chrono_literals;
+
+		services.add( name, port );
+		while( mSignalStatus == 0 ){
+			std::this_thread::sleep_for( 500ms );
+		}
+		services.remove( name );
 
 		mLogger->info( "REST server closed." );
 		opentracing::Tracer::Global()->Close();
@@ -233,6 +251,14 @@ public:
 
 protected:
 	std::shared_ptr<spdlog::logger>		mLogger;
+	static std::sig_atomic_t 			mSignalStatus;
+
+	static void signalHandler( int signal )
+	{
+		mSignalStatus = signal;
+	}
 };
+
+std::sig_atomic_t HTTPServer::mSignalStatus;
 
 }
