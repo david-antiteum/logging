@@ -9,6 +9,7 @@
 
 #include "../utils/otutils.h"
 #include "../utils/consul_client.h"
+#include "../utils/server.h"
 
 using namespace utility;                    // Common utilities like string conversions
 using namespace web;                        // Common features like URIs.
@@ -36,13 +37,13 @@ public:
 		while( forePort == 0 || pricePort == 0 ){
 			mLogger->debug( "Looking for services..." );
 			if( forePort == 0 ){
-				if( auto forecaster = services.get( "forecaster" ); forecaster ){
+				if( auto forecaster = services.get( fmt::format( "forecaster_{}", mGroup )); forecaster ){
 					forePort = forecaster.value().mPort;
 					mLogger->debug( "Forecaster found in port {}", forePort );
 				}
 			}
 			if( pricePort == 0 ){
-				if( auto priceReader = services.get( "price-reader" ); priceReader ){
+				if( auto priceReader = services.get( fmt::format( "price-reader_{}",  mGroup )); priceReader ){
 					pricePort = priceReader.value().mPort;
 					mLogger->debug( "Price Reader found in port {}", pricePort );
 				}
@@ -204,14 +205,16 @@ int main( int argc, char * argv[])
 	int 				pricePort = 0;
 	std::string			logFile;
 	std::string			graylogHost;
+	std::string			group;
 
  	options
 	 	.positional_help("[optional args]")
 		.show_positional_help();
 
 	options.add_options()
+		("g,group", "service group", cxxopts::value<std::string>( group ) )
 		("help", "Print help")
-		("verbose", "Increase log level", cxxopts::value<bool>( verbose )->default_value("false") )
+		("v,verbose", "Increase log level", cxxopts::value<bool>( verbose )->default_value("false") )
 		("log-file", "Log file", cxxopts::value<std::string>( logFile ) )
 		("graylog-host", "schema://host:port. Example: http://localhost:12201", cxxopts::value<std::string>( graylogHost ) )
 		("p,port", "Port", cxxopts::value<int>( port )->default_value( "16000" ) )
@@ -231,6 +234,9 @@ int main( int argc, char * argv[])
 
 	MyHTTPServer	server( forecastingPort, pricePort, utils::newLogger( "api-gateway", verbose, logFile, graylogHost ) );
 
+	if( !group.empty() ){
+		server.setGroup( group );
+	}
 	server.discover();
 	server.run( "api-gateway", port );
 

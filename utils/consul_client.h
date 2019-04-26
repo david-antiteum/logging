@@ -58,18 +58,24 @@ public:
 		return res;
 	}
 
-	void add( const std::string & name, int port )
+	void add( const std::string & name, int port, const std::string & group )
 	{
 		const std::string 				query = fmt::format( "{}/agent/service/register", mConsulAddress );
 		web::http::client::http_client 	client( utility::conversions::to_string_t( query ));
 		web::http::http_request			req( web::http::methods::PUT );
 		web::json::value				payload;
 		web::json::value				payloadCheck;
+		web::json::value				tags = web::json::value::array();
 
-		payload[ U("ID") ] = web::json::value::string( utility::conversions::to_string_t( name ));
+		payload[ U("ID") ] = web::json::value::string( utility::conversions::to_string_t( name + "_" + group ));
 		payload[ U("Name") ] = web::json::value::string( utility::conversions::to_string_t( name ));
 		payload[ U("Address") ] = web::json::value::string( U("127.0.0.1" ));
 		payload[ U("Port") ] = web::json::value::number( port );
+
+		if( !group.empty() ){
+			tags.as_array()[0] = web::json::value::string( utility::conversions::to_string_t( group ));
+		}
+		payload[ U("tags") ] = tags;
 
 		payloadCheck[ U( "HTTP" ) ] = web::json::value::string( utility::conversions::to_string_t( fmt::format( "http://127.0.0.1:{}/ping", port ) ));;
 		payloadCheck[ U( "interval" ) ] = web::json::value::string( U( "110s" ) );
@@ -93,9 +99,9 @@ public:
 		.wait();
 	}
 
-	void remove( const std::string & id )
+	void remove( const std::string & id, const std::string & group )
 	{
-		const std::string 				query = fmt::format( "{}/agent/service/deregister/{}", mConsulAddress, id );
+		const std::string 				query = fmt::format( "{}/agent/service/deregister/{}_{}", mConsulAddress, id, group );
 		web::http::client::http_client 	client( utility::conversions::to_string_t( query ));
 		web::http::http_request			req( web::http::methods::PUT );
 
