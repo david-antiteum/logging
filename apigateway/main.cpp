@@ -232,13 +232,28 @@ int main( int argc, char * argv[])
     	exit(1);
 	}
 
-	MyHTTPServer	server( forecastingPort, pricePort, utils::newLogger( "api-gateway", verbose, logFile, graylogHost ) );
+	MyHTTPServer			server( forecastingPort, pricePort, utils::newLogger( "api-gateway", verbose, logFile, graylogHost ) );
+	consul::Sessions		sessions;
+	consul::Session			session;
+	consul::Leader			leader;
+	consul::Leader::Status	leaderStatus = consul::Leader::Status::No;
 
+	session = sessions.create();
+	leaderStatus = leader.acquire( "api-gateway", session );
+	if( leaderStatus == consul::Leader::Status::Yes ){
+		server.logger().info( "I'm the leader" );
+	}else{
+		server.logger().info( "I'm a follower" );
+	}
 	if( !group.empty() ){
 		server.setGroup( group );
 	}
 	server.discover();
 	server.run( "api-gateway", port );
+	if( leaderStatus == consul::Leader::Status::Yes ){
+		leader.release( "api-gateway", session );
+	}
+	sessions.destroy( session );
 
 	return 0;
 }

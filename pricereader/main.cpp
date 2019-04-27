@@ -150,7 +150,7 @@ int main( int argc, char * argv[])
 		("g,group", "service group", cxxopts::value<std::string>( group ) )
 		("help", "Print help")
 		("api-key", "Alphavantage API Key", cxxopts::value<std::string>( apiKey ) )
-		("verbose", "Increase log level", cxxopts::value<bool>( verbose )->default_value("false") )
+		("v,verbose", "Increase log level", cxxopts::value<bool>( verbose )->default_value("false") )
 		("log-file", "Log file", cxxopts::value<std::string>( logFile ) )
 		("graylog-host", "schema://host:port. Example: http://localhost:12201", cxxopts::value<std::string>( graylogHost ) )
 		("p,port", "Port", cxxopts::value<int>( port )->default_value( "16002" ) );
