@@ -248,11 +248,28 @@ int main( int argc, char * argv[])
 	if( !group.empty() ){
 		server.setGroup( group );
 	}
+	consul::Observer		observer( "api-gateway", session );
+	observer.leader( [&server, &session, &leader, &leaderStatus ]( consul::Session leaderSession ){
+		if( leaderSession == session ){
+			server.logger().info( "I'm a leader now" );
+		}else{
+			if( leaderSession.empty() ){
+				server.logger().info( "There is no leader. Let me try..." );
+				leaderStatus = leader.acquire( "api-gateway", session );
+				if( leaderStatus == consul::Leader::Status::Yes ){
+					server.logger().info( "I'm the leader now!" );
+				}else{
+					server.logger().info( "I'm still a follower" );
+				}
+			}
+		}
+	});
+	observer.run();
 	server.discover();
+
 	server.run( "api-gateway", port );
-	if( leaderStatus == consul::Leader::Status::Yes ){
-		leader.release( "api-gateway", session );
-	}
+
+	leader.release( "api-gateway", session );
 	sessions.destroy( session );
 
 	return 0;
