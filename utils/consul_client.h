@@ -40,7 +40,7 @@ public:
 					const auto member = jsonRes.at( U( "Member" ) );
 
 					if( member.has_field( U( "Addr" ))){
-						mAddress = member.at( U( "Addr" )).as_string();
+						mAddress = utility::conversions::to_utf8string( member.at( U( "Addr" )).as_string() );
 					}
 				}
 			}catch( web::http::http_exception const & e ){
@@ -88,11 +88,11 @@ public:
 			try{
 				const auto jsonRes = previousTask.get();
 
-				if( jsonRes.has_field( utility::conversions::to_string_t( "ID" )) ){
+				if( jsonRes.has_field( U( "ID" )) ){
 					Service	service;
 
-					service.mId = jsonRes.at( utility::conversions::to_string_t( "ID" )).as_string();
-					service.mPort = jsonRes.at( utility::conversions::to_string_t( "Port" )).as_number().to_int32();
+					service.mId = utility::conversions::to_utf8string( jsonRes.at( U( "ID" )).as_string() );
+					service.mPort = jsonRes.at( U( "Port" )).as_number().to_int32();
 
 					res = service;
 				}
@@ -193,8 +193,8 @@ public:
 			try{
 				const auto jsonRes = previousTask.get();
 
-				if( jsonRes.has_field( utility::conversions::to_string_t( "ID" )) ){
-					res = jsonRes.at( utility::conversions::to_string_t( "ID" )).as_string();
+				if( jsonRes.has_field( U( "ID" )) ){
+					res = utility::conversions::to_utf8string( jsonRes.at( U( "ID" )).as_string());
 				}
 			}catch( web::http::http_exception const & e ){
 				std::wcout << e.what() << std::endl;
@@ -251,14 +251,14 @@ public:
 			if( response.status_code() == web::http::status_codes::OK ){
 				return response.extract_string();
 			}
-			return pplx::task_from_result( std::string() );
+			return pplx::task_from_result( utility::string_t() );
 		}).then([ &res ](pplx::task<utility::string_t> previousTask){
 			try{
-				const auto stringRes = previousTask.get();
+				const auto stringRes = utility::conversions::to_utf8string( previousTask.get() );
 
-				if( stringRes == U( "true" ) ){
+				if( stringRes.find( "true" ) != std::string::npos ){
 					res = Status::Yes;
-				}else if( stringRes == U( "true" ) ){
+				}else if( stringRes.find( "false" ) != std::string::npos ){
 					res = Status::No;
 				}
 			}catch( web::http::http_exception const & e ){
@@ -280,7 +280,7 @@ public:
 			if( response.status_code() == web::http::status_codes::OK ){
 				return response.extract_string();
 			}
-			return pplx::task_from_result( std::string() );
+			return pplx::task_from_result( utility::string_t() );
 		}).then([](pplx::task<utility::string_t> previousTask){
 			try{
 				const auto stringRes = previousTask.get();
@@ -359,8 +359,8 @@ private:
 							if( jsonArray.size() > 0 ){
 								const auto leaderInfo = jsonArray.at(0);
 
-								if( leaderInfo.has_field( utility::conversions::to_string_t( "Session" )) ){
-									session = leaderInfo.at( utility::conversions::to_string_t( "Session" )).as_string();
+								if( leaderInfo.has_field( U( "Session" )) ){
+									session = utility::conversions::to_utf8string( leaderInfo.at( U( "Session" )).as_string() );
 								}
 							}
 						}
