@@ -9,6 +9,11 @@ class HTTPServer
 public:
 	explicit HTTPServer( std::shared_ptr<spdlog::logger> logger ) : mLogger( logger ) {}
 
+	spdlog::logger & logger() const
+	{
+		return *mLogger.get();
+	}
+
 	void setGroup( const std::string & group )
 	{
 		mGroup = group;

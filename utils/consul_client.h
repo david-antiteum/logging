@@ -12,9 +12,8 @@
 namespace consul
 {
 
-class Service
+struct Service
 {
-public:
 	std::string		mId;
 	int				mPort = 0;
 };
@@ -113,6 +112,131 @@ public:
 		}).then([](pplx::task<web::json::value> previousTask){
 			try{
 				const auto jsonRes = previousTask.get();
+
+			}catch( web::http::http_exception const & e ){
+				std::wcout << e.what() << std::endl;
+			}
+		})
+		.wait();
+	}
+};
+
+using Session = std::string;
+
+class Sessions
+{
+private:
+	const std::string mConsulAddress{ "http://127.0.0.1:8500/v1" };
+
+public:
+	Session create() const
+	{
+		const std::string 				query = fmt::format( "{}/session/create", mConsulAddress );
+		web::http::client::http_client 	client( utility::conversions::to_string_t( query ));
+		web::http::http_request			req( web::http::methods::PUT );
+		Session							res;
+
+		req.headers().set_content_type( U("application/json; charset=utf-8") );
+		client.request( req ).then([]( web::http::http_response response ){
+			if( response.status_code() == web::http::status_codes::OK ){
+				return response.extract_json();
+			}
+			return pplx::task_from_result( web::json::value() );
+		}).then([ &res ](pplx::task<web::json::value> previousTask){
+			try{
+				const auto jsonRes = previousTask.get();
+
+				if( jsonRes.has_field( utility::conversions::to_string_t( "ID" )) ){
+					res = jsonRes.at( utility::conversions::to_string_t( "ID" )).as_string();
+				}
+			}catch( web::http::http_exception const & e ){
+				std::wcout << e.what() << std::endl;
+			}
+		})
+		.wait();
+	
+		return res;
+	}
+
+	void destroy( const Session & id ) const
+	{
+		const std::string 				query = fmt::format( "{}/session/destroy/{}", mConsulAddress, id );
+		web::http::client::http_client 	client( utility::conversions::to_string_t( query ));
+		web::http::http_request			req( web::http::methods::PUT );
+
+		client.request( req ).then([]( web::http::http_response response ){
+			if( response.status_code() == web::http::status_codes::OK ){
+				return response.extract_json();
+			}
+			return pplx::task_from_result( web::json::value() );
+		}).then([](pplx::task<web::json::value> previousTask){
+			try{
+				const auto jsonRes = previousTask.get();
+
+			}catch( web::http::http_exception const & e ){
+				std::wcout << e.what() << std::endl;
+			}
+		})
+		.wait();
+	}
+};
+
+class Leader
+{
+private:
+	const std::string mConsulAddress{ "http://127.0.0.1:8500/v1" };
+
+public:
+	enum class Status {
+		Yes,
+		No,
+		Error
+	};
+
+	Status acquire( const std::string & service, const Session & session )
+	{
+		Status							res = Status::Error;
+		const std::string 				query = fmt::format( "{}/kv/service/{}/leader?acquire={}", mConsulAddress, service, session );
+		web::http::client::http_client 	client( utility::conversions::to_string_t( query ));
+		web::http::http_request			req( web::http::methods::PUT );
+
+		client.request( req ).then([]( web::http::http_response response ){
+			if( response.status_code() == web::http::status_codes::OK ){
+				return response.extract_string();
+			}
+			return pplx::task_from_result( std::string() );
+		}).then([ &res ](pplx::task<utility::string_t> previousTask){
+			try{
+				const auto stringRes = previousTask.get();
+
+				if( stringRes == U( "true" ) ){
+					res = Status::Yes;
+				}else if( stringRes == U( "true" ) ){
+					res = Status::No;
+				}
+			}catch( web::http::http_exception const & e ){
+				std::wcout << e.what() << std::endl;
+			}
+		})
+		.wait();
+
+		return res;
+	}
+
+	void release( const std::string & service, const Session & session )
+	{
+		const std::string 				query = fmt::format( "{}/kv/service/{}/leader?release={}", mConsulAddress, service, session );
+		web::http::client::http_client 	client( utility::conversions::to_string_t( query ));
+		web::http::http_request			req( web::http::methods::PUT );
+
+		client.request( req ).then([]( web::http::http_response response ){
+			if( response.status_code() == web::http::status_codes::OK ){
+				return response.extract_string();
+			}
+			return pplx::task_from_result( std::string() );
+		}).then([](pplx::task<utility::string_t> previousTask){
+			try{
+				const auto stringRes = previousTask.get();
 
 			}catch( web::http::http_exception const & e ){
 				std::wcout << e.what() << std::endl;
