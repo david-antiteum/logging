@@ -26,7 +26,7 @@ public:
 		mPricePort = pricePort;
 	}
 
-	void discover()
+	bool discover()
 	{
 		consul::Services	services;
 		int					forePort = 0;
@@ -34,7 +34,9 @@ public:
 
 		using namespace std::chrono_literals;
 
-		while( forePort == 0 || pricePort == 0 ){
+		auto previousSignal = std::signal( SIGINT, HTTPServer::signalHandler );
+
+		while( mSignalStatus == 0 && ( forePort == 0 || pricePort == 0 )){
 			mLogger->debug( "Looking for services..." );
 			if( forePort == 0 ){
 				if( auto forecaster = services.get( fmt::format( "forecaster_{}", mGroup )); forecaster ){
@@ -53,7 +55,11 @@ public:
 			}
 		}
 		mForecastingPort = forePort;
-		mPricePort = pricePort;		
+		mPricePort = pricePort;
+
+		std::signal( SIGINT, previousSignal );
+
+		return mForecastingPort > 0 && mPricePort > 0;
 	}
 
 	void get( http_request & request ) override
@@ -269,10 +275,9 @@ int main( int argc, char * argv[])
 		}
 	});
 	observer.run();
-	server.discover();
-
-	server.run( "api-gateway", port );
-
+	if( server.discover() ){
+		server.run( "api-gateway", port );
+	}
 	leader.release( "api-gateway", session );
 	sessions.destroy( session );
 
