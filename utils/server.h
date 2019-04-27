@@ -50,7 +50,7 @@ public:
 			mLogger->critical( "REST server exception." );
 		}
 		
-		std::signal( SIGINT, HTTPServer::signalHandler );
+		auto previousSignal = std::signal( SIGINT, HTTPServer::signalHandler );
 
 		// All set, register service
 		consul::Services	services;
@@ -65,6 +65,7 @@ public:
 
 		mLogger->info( "REST server closed." );
 		opentracing::Tracer::Global()->Close();
+		std::signal( SIGINT, previousSignal );
 	}
 
 protected:
