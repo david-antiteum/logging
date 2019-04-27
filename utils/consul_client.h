@@ -14,6 +14,51 @@
 namespace consul
 {
 
+class Agent
+{
+private:
+	const std::string mConsulAddress{ "http://127.0.0.1:8500/v1" };
+public:
+
+	void self()
+	{
+		const std::string 				query = fmt::format( "{}/agent/self", mConsulAddress );
+		web::http::client::http_client 	client( utility::conversions::to_string_t( query ));
+		web::http::http_request			req( web::http::methods::GET );
+
+		req.headers().set_content_type( U("application/json; charset=utf-8") );
+		client.request( req ).then([]( web::http::http_response response ){
+			if( response.status_code() == web::http::status_codes::OK ){
+				return response.extract_json();
+			}
+			return pplx::task_from_result( web::json::value() );
+		}).then([ this ](pplx::task<web::json::value> previousTask){
+			try{
+				const auto jsonRes = previousTask.get();
+
+				if( jsonRes.has_field( U( "Member" ))){
+					const auto member = jsonRes.at( U( "Member" ) );
+
+					if( member.has_field( U( "Addr" ))){
+						mAddress = member.at( U( "Addr" )).as_string();
+					}
+				}
+			}catch( web::http::http_exception const & e ){
+				std::wcout << e.what() << std::endl;
+			}
+		})
+		.wait();
+	}
+
+	std::string address() const
+	{
+		return mAddress;
+	}
+
+private:
+	std::string		mAddress;
+};
+
 struct Service
 {
 	std::string		mId;

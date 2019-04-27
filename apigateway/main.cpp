@@ -233,10 +233,14 @@ int main( int argc, char * argv[])
 	}
 
 	MyHTTPServer			server( forecastingPort, pricePort, utils::newLogger( "api-gateway", verbose, logFile, graylogHost ) );
+	consul::Agent			agent;
 	consul::Sessions		sessions;
 	consul::Session			session;
 	consul::Leader			leader;
 	consul::Leader::Status	leaderStatus = consul::Leader::Status::No;
+
+	agent.self();
+	server.logger().info( "My Address is {}", agent.address() );
 
 	session = sessions.create();
 	leaderStatus = leader.acquire( "api-gateway", session );
