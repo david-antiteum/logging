@@ -22,16 +22,16 @@
 
 #include <yaml-cpp/yaml.h>
 
-//https://github.com/gabime/spdlog
+#include <fmt/format.h>
+#include <fmt/printf.h>
+#include <fmt/ostream.h>
+
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/rotating_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/sinks/base_sink.h>
-#include <spdlog/fmt/fmt.h>
 
 #include <chrono>
-
-#include "consul_client.h"
 
 namespace utils {
 

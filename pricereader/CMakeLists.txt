@@ -9,8 +9,12 @@ find_package( yaml-cpp CONFIG REQUIRED )
 find_package( cpprestsdk CONFIG REQUIRED )
 find_package( nlohmann_json CONFIG REQUIRED )
 find_package( OpenTracing CONFIG REQUIRED )
+find_package( uriparser CONFIG REQUIRED )
+find_package( fmt CONFIG REQUIRED )
+find_package( spdlog CONFIG REQUIRED )
+find_package( consulcpp CONFIG REQUIRED )
 
-link_libraries( nlohmann_json cpprestsdk::cpprest OpenTracing::opentracing yaml-cpp )
+link_libraries( nlohmann_json cpprestsdk::cpprest OpenTracing::opentracing yaml-cpp consulcpp uriparser::uriparser fmt::fmt )
 
 find_package( Thrift CONFIG )
 find_package( jaegertracing CONFIG )

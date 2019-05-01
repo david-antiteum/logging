@@ -7,9 +7,11 @@
 #include <chrono>
 #include <thread>
 
+#include <consulcpp/ConsulCpp>
+
 #include "../utils/otutils.h"
-#include "../utils/consul_client.h"
 #include "../utils/server.h"
+#include "../utils/consul_client.h"
 
 using namespace utility;                    // Common utilities like string conversions
 using namespace web;                        // Common features like URIs.
@@ -26,9 +28,8 @@ public:
 		mPricePort = pricePort;
 	}
 
-	bool discover()
+	bool discover( const consulcpp::Consul & consul )
 	{
-		consul::Services	services;
 		int					forePort = 0;
 		int					pricePort = 0;
 
@@ -39,13 +40,13 @@ public:
 		while( mSignalStatus == 0 && ( forePort == 0 || pricePort == 0 )){
 			mLogger->debug( "Looking for services..." );
 			if( forePort == 0 ){
-				if( auto forecaster = services.get( fmt::format( "forecaster_{}", mGroup )); forecaster ){
+				if( auto forecaster = consul.services().findInLocal( fmt::format( "forecaster_{}", mGroup )); forecaster ){
 					forePort = forecaster.value().mPort;
 					mLogger->debug( "Forecaster found in port {}", forePort );
 				}
 			}
 			if( pricePort == 0 ){
-				if( auto priceReader = services.get( fmt::format( "price-reader_{}",  mGroup )); priceReader ){
+				if( auto priceReader = consul.services().findInLocal( fmt::format( "price-reader_{}",  mGroup )); priceReader ){
 					pricePort = priceReader.value().mPort;
 					mLogger->debug( "Price Reader found in port {}", pricePort );
 				}
@@ -68,7 +69,7 @@ public:
 
 		mLogger->debug( "{} {} from {}", utility::conversions::to_utf8string( request.method() ), uri, utility::conversions::to_utf8string( request.remote_address() ));
 
-		if( uri == "/ping" ){
+		if( uri == "/health" ){
 			request.reply( status_codes::OK, "{}", "application/json; charset=utf-8" );
 		}else{
 			const std::regex 		rgx("/forecasting/(\\w+)");
@@ -212,6 +213,7 @@ int main( int argc, char * argv[])
 	std::string			logFile;
 	std::string			graylogHost;
 	std::string			group;
+	std::string			appName = "api-gateway";
 
  	options
 	 	.positional_help("[optional args]")
@@ -237,49 +239,63 @@ int main( int argc, char * argv[])
     	spdlog::critical( "error parsing options: {}", e.what() );
     	exit(1);
 	}
+	consulcpp::Consul		consul;
 
-	MyHTTPServer			server( forecastingPort, pricePort, utils::newLogger( "api-gateway", verbose, logFile, graylogHost ) );
-	consul::Agent			agent;
-	consul::Sessions		sessions;
-	consul::Session			session;
-	consul::Leader			leader;
-	consul::Leader::Status	leaderStatus = consul::Leader::Status::No;
+	if( consul.connect() ){
+		MyHTTPServer				server( forecastingPort, pricePort, utils::newLogger( appName, verbose, logFile, graylogHost ) );
+		consulcpp::Service			service;
+		consulcpp::ServiceCheck		check;
+		consulcpp::Leader::Status	leaderStatus = consulcpp::Leader::Status::No;
 
-	agent.self();
-	server.logger().info( "My Address is {}", agent.address() );
+		service.mId = fmt::format( "{}_{}", appName, group );
+		service.mName = appName;
+		service.mAddress = consul.address();
+		service.mPort = port;
+		if( !group.empty() ){
+			service.mTags = { group };
+			server.setGroup( group );
+		}
+		check.mInterval = "5s";
+		check.mHTTP = fmt::format( "http://{}:{}/health", service.mAddress, service.mPort );
+		service.mChecks = { check };
 
-	session = sessions.create();
-	leaderStatus = leader.acquire( "api-gateway", session );
-	if( leaderStatus == consul::Leader::Status::Yes ){
-		server.logger().info( "I'm the leader" );
-	}else{
-		server.logger().info( "I'm a follower" );
-	}
-	if( !group.empty() ){
-		server.setGroup( group );
-	}
-	consul::Observer		observer( "api-gateway", session );
-	observer.leader( [&server, &session, &leader, &leaderStatus ]( consul::Session leaderSession ){
-		if( leaderSession == session ){
-			server.logger().info( "I'm a leader now" );
+		consul.services().create( service );
+		auto session = consul.sessions().create();
+		server.logger().info( "My Address is {}, my session {}", consul.address(), session.mId );
+		
+		leaderStatus = consul.leader().acquire( service, session );
+		if( leaderStatus == consulcpp::Leader::Status::Yes ){
+			server.logger().info( "I'm the leader" );
 		}else{
-			if( leaderSession.empty() ){
-				server.logger().info( "There is no leader. Let me try..." );
-				leaderStatus = leader.acquire( "api-gateway", session );
-				if( leaderStatus == consul::Leader::Status::Yes ){
-					server.logger().info( "I'm the leader now!" );
-				}else{
-					server.logger().info( "I'm still a follower" );
+			server.logger().info( "I'm a follower" );
+		}
+
+		consulcpp::Observer		observer( service, session );
+		observer.leader( [&server, &consul, &service, &session, &leaderStatus ]( std::string leaderSession ){
+			if( leaderSession == session.mId ){
+				server.logger().info( "I'm a leader now" );
+			}else{
+				if( leaderSession.empty() ){
+					server.logger().info( "There is no leader. Let me try..." );
+					leaderStatus = consul.leader().acquire( service, session );
+					if( leaderStatus == consulcpp::Leader::Status::Yes ){
+						server.logger().info( "I'm the leader now!" );
+					}else{
+						server.logger().info( "I'm still a follower" );
+					}
 				}
 			}
-		}
-	});
-	observer.run();
-	if( server.discover() ){
-		server.run( "api-gateway", port );
-	}
-	leader.release( "api-gateway", session );
-	sessions.destroy( session );
+		});
+		observer.run();
 
+		if( server.discover( consul ) ){
+			server.run( service.mName, service.mPort );
+		}
+		consul.leader().release( service, session );
+		consul.sessions().destroy( session );
+		consul.services().destroy( service );	
+	}else{
+
+	}
 	return 0;
 }

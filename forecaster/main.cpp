@@ -3,6 +3,7 @@
 
 //
 #include <optional>
+#include <consulcpp/ConsulCpp>
 
 #include "../utils/otutils.h"
 #include "../utils/server.h"
@@ -26,7 +27,7 @@ public:
 
 		mLogger->debug( "{} {} from {}", utility::conversions::to_utf8string( request.method() ), utility::conversions::to_utf8string( uri.to_string() ), utility::conversions::to_utf8string( request.remote_address() ));
 
-		if( uri.path() == utility::conversions::to_string_t( "/ping" )){
+		if( uri.path() == utility::conversions::to_string_t( "/health" )){
 			request.reply( status_codes::OK, "{}", "application/json; charset=utf-8" );
 		}else{
 			if( uri.path() == utility::conversions::to_string_t( "/forecasting" )){
@@ -88,6 +89,7 @@ int main( int argc, char * argv[])
 	std::string			logFile;
 	std::string			graylogHost;
 	std::string			group;
+	std::string			appName = "forecaster";
 
  	options
 	 	.positional_help("[optional args]")
@@ -111,13 +113,28 @@ int main( int argc, char * argv[])
     	spdlog::critical( "error parsing options: {}", e.what() );
     	exit(1);
 	}
+	consulcpp::Consul		consul;
 
-	MyHTTPServer	server( utils::newLogger( "forecaster", verbose, logFile, graylogHost ) );
+	if( consul.connect() ){
+		MyHTTPServer				server( utils::newLogger( appName, verbose, logFile, graylogHost ) );
+		consulcpp::Service			service;
+		consulcpp::ServiceCheck		check;
 
-	if( !group.empty() ){
-		server.setGroup( group );
+		service.mId = fmt::format( "{}_{}", appName, group );
+		service.mName = appName;
+		service.mAddress = consul.address();
+		service.mPort = port;
+		if( !group.empty() ){
+			service.mTags = { group };
+			server.setGroup( group );
+		}
+		check.mInterval = "5s";
+		check.mHTTP = fmt::format( "http://{}:{}/health", service.mAddress, service.mPort );
+		service.mChecks = { check };
+
+		consul.services().create( service );
+		server.run( service.mName, service.mPort );
+		consul.services().destroy( service );	
 	}
-	server.run( "forecaster", port );
-
 	return 0;
 }

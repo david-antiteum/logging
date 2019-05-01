@@ -46,23 +46,17 @@ public:
 			if( result != pplx::completed ){
 				mLogger->critical( "REST server fails to start." );
 			}
-		}catch( std::exception const& e ){
+		}catch( const std::exception & /*e*/ ){
 			mLogger->critical( "REST server exception." );
 		}
 		
 		auto previousSignal = std::signal( SIGINT, HTTPServer::signalHandler );
 
-		// All set, register service
-		consul::Services	services;
-
 		using namespace std::chrono_literals;
 
-		services.add( name, port, mGroup );
 		while( mSignalStatus == 0 ){
 			std::this_thread::sleep_for( 500ms );
 		}
-		services.remove( name, mGroup );
-
 		mLogger->info( "REST server closed." );
 		opentracing::Tracer::Global()->Close();
 		std::signal( SIGINT, previousSignal );
