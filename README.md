@@ -5,6 +5,7 @@ Example code to present logging and tracing in the [Barcelona C++ Meetup group](
 The code shows basic concepts and includes inefficient code, questionable constructions and repetitions.
 
 The example has three services:
+
 - apigateway: calls the internal services. Has a single GET end point /forecasting/{SYMBOL}
 - pricereader: returns the price of a ticker symbol. GET end point /value/{SYMBOL}
 - forecaster: calculates the forecasting of a ticker symbol. GET end point /forecasting?symbol={SYMBOL}&value={VALUE}
@@ -13,19 +14,18 @@ The apigateway will receive the request, call the pricereader to get the last va
 
 ## Building
 
-Use cmake to build the project.
+Use CMake to build the project.
 
 ## Dependencies
 
-
 Header only libraries found in the include folder:
 
-- [spdlog](https://github.com/gabime/spdlog): Very fast, header only, C++ logging library
-- [fmt](https://github.com/fmtlib/fmt): {fmt} is an open-source formatting library for C++.
 - [cxxopts](https://github.com/jarro2783/cxxopts): A lightweight C++ option parser library, supporting the standard GNU style syntax for options.
 
 Libraries installed by the user:
 
+- [spdlog](https://github.com/gabime/spdlog): Very fast, header only, C++ logging library
+- [fmt](https://github.com/fmtlib/fmt): {fmt} is an open-source formatting library for C++.
 - [boost](https://www.boost.org): Boost provides free peer-reviewed portable C++ source libraries.
 - [C++ REST SDK](https://github.com/Microsoft/cpprestsdk): The C++ REST SDK is a Microsoft project for cloud-based client-server communication in native code using a modern asynchronous C++ API design.
 - [OpenTracing API for C++](https://github.com/opentracing/opentracing-cpp): C++ implementation of the [OpenTracing API](http://opentracing.io)
@@ -33,23 +33,28 @@ Libraries installed by the user:
 - [openssl](https://www.openssl.org): OpenSSL is a robust, commercial-grade, and full-featured toolkit for the Transport Layer Security (TLS) and Secure Sockets Layer (SSL) protocols.
 - [yaml-cpp](https://github.com/jbeder/yaml-cpp): yaml-cpp is a YAML parser and emitter in C++ matching the YAML 1.2 spec.
 
-Deoendencies can be installed using vcpkg:
+Dependencies can be installed using vcpkg:
 
-```
+```bash
 vcpkg install boost
+vcpkg install fmt
+vcpkg install spdlog
 vcpkg install yaml-cpp
 vcpkg install nlohmann-json
 vcpkg install cpprestsdk
-vcpkg install thrift
 vcpkg install opentracing
+vcpkg install thrift
 vcpkg install jaegertracing
 ```
+
+thrift port in vcpkg requires some manual fixes in the cmake files after installing.
+jaegertracing port is not available yet (I have a private copy, waiting for some interest by jaeger devs). Jaeger only runs in Unix systems.
 
 ## Running Jaeger
 
 Start Jaeger, either the docker image:
 
-```
+```bash
 docker run -d --name jaeger \
   -e COLLECTOR_ZIPKIN_HTTP_PORT=9411 \
   -p 5775:5775/udp \
@@ -64,7 +69,7 @@ docker run -d --name jaeger \
 
 or jaeger-all-in-one:
 
-```
+```bash
 ./jaeger-all-in-one --collector.zipkin.http-port=9411
 ```
 
@@ -72,7 +77,7 @@ Then start the three services.
 
 Ask for a forecasting:
 
-```
+```bash
 curl http://127.0.0.1:16000/forecasting/AMZN
 ```
 
@@ -82,7 +87,7 @@ See the traces in [Jaeger UI](http://localhost:16686).
 
 Start Graylog:
 
-```
+```bash
 docker run --name mongo -d mongo:3
 docker run --name elasticsearch -e "http.host=0.0.0.0" -e "ES_JAVA_OPTS=-Xms512m -Xmx512m" -d docker.elastic.co/elasticsearch/elasticsearch-oss:6.6.1
 docker run --name graylog --link mongo --link elasticsearch -p 9000:9000 -p 12201:12201 -p 1514:1514 -e GRAYLOG_HTTP_EXTERNAL_URI="http://127.0.0.1:9000/" -d graylog/graylog:3.0.0-2
@@ -92,6 +97,6 @@ Create a new Global Input (System menu) of type GELF HTTP using port 12201.
 
 Start the services with the flag:
 
-```
+```bash
 --graylog-host http://localhost:12201
 ```

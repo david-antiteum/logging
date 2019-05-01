@@ -9,11 +9,13 @@
 #include <cpprest/http_client.h>
 #include <cpprest/json.h>
 
-#include <spdlog/fmt/fmt.h>
+#include <fmt/format.h>
 
-namespace consul
+#include <consulcpp/ConsulCpp>
+
+namespace consulcpp
 {
-
+/*
 class Agent
 {
 private:
@@ -292,6 +294,7 @@ public:
 		.wait();
 	}
 };
+*/
 
 class Observer
 {
@@ -299,9 +302,9 @@ private:
 	const std::string mConsulAddress{ "http://127.0.0.1:8500/v1" };
 
 public:
-	Observer( const std::string & service, const Session & session )
-		: mService( service )
-		, mSession( session )
+	Observer( const Service & service, const Session & session )
+		: mService( service.mName )
+		, mSession( session.mId )
 	{
 
 	}
@@ -314,7 +317,7 @@ public:
 		}
 	}
 
-	void leader( std::function<void(Session)> leaderObserver )
+	void leader( std::function<void(std::string)> leaderObserver )
 	{
 		mLeaderObserver = leaderObserver;
 	}
@@ -326,12 +329,12 @@ public:
 	}
 
 private:
-	std::string						mService;
-	Session							mSession;
-	std::function<void(Session)> 	mLeaderObserver;
+	std::string							mService;
+	std::string							mSession;
+	std::function<void(std::string)> 	mLeaderObserver;
 
-	std::unique_ptr<std::thread>	mThread;
-	std::atomic<short> 				mRunThread;
+	std::unique_ptr<std::thread>		mThread;
+	std::atomic<short> 					mRunThread;
 
 	void realRun()
 	{
@@ -352,7 +355,7 @@ private:
 				}).then([ this ](pplx::task<web::json::value> previousTask){
 					try{
 						const auto jsonRes = previousTask.get();
-						Session session;
+						std::string session;
 
 						if( jsonRes.is_array() ){
 							const auto jsonArray = jsonRes.as_array();

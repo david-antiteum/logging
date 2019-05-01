@@ -4,6 +4,7 @@
 //
 #include <regex>
 #include <optional>
+#include <consulcpp/ConsulCpp>
 
 #include "../utils/otutils.h"
 #include "../utils/server.h"
@@ -31,7 +32,7 @@ public:
 
 		mLogger->debug( "{} {} from {}", utility::conversions::to_utf8string( request.method() ), uri, utility::conversions::to_utf8string( request.remote_address() ));
 
-		if( uri == "/ping" ){
+		if( uri == "/health" ){
 			request.reply( status_codes::OK, "{}", "application/json; charset=utf-8" );
 		}else{
 			const std::regex 	rgx("/value/(\\w+)");
@@ -141,6 +142,7 @@ int main( int argc, char * argv[])
 	std::string			apiKey;
 	std::string			graylogHost;
 	std::string			group;
+	std::string			appName = "price-reader";
 
  	options
 	 	.positional_help("[optional args]")
@@ -165,13 +167,28 @@ int main( int argc, char * argv[])
     	spdlog::critical( "error parsing options: {}", e.what() );
     	exit(1);
 	}
+	consulcpp::Consul		consul;
 
-	MyHTTPServer	server( apiKey, utils::newLogger( "price-reader", verbose, logFile, graylogHost ) );
+	if( consul.connect() ){
+		MyHTTPServer				server( apiKey, utils::newLogger( appName, verbose, logFile, graylogHost ) );
+		consulcpp::Service			service;
+		consulcpp::ServiceCheck		check;
 
-	if( !group.empty() ){
-		server.setGroup( group );
+		service.mId = fmt::format( "{}_{}", appName, group );
+		service.mName = appName;
+		service.mAddress = consul.address();
+		service.mPort = port;
+		if( !group.empty() ){
+			service.mTags = { group };
+			server.setGroup( group );
+		}
+		check.mInterval = "5s";
+		check.mHTTP = fmt::format( "http://{}:{}/health", service.mAddress, service.mPort );
+		service.mChecks = { check };
+
+		consul.services().create( service );
+		server.run( service.mName, service.mPort );
+		consul.services().destroy( service );	
 	}
-	server.run( "price-reader", port );
-
 	return 0;
 }
