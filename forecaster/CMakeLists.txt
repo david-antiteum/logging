@@ -13,6 +13,7 @@ find_package( uriparser CONFIG REQUIRED )
 find_package( fmt CONFIG REQUIRED )
 find_package( spdlog CONFIG REQUIRED )
 find_package( consulcpp CONFIG REQUIRED )
+find_package( Boost COMPONENTS thread REQUIRED )
 
 link_libraries( nlohmann_json cpprestsdk::cpprest OpenTracing::opentracing yaml-cpp consulcpp uriparser::uriparser fmt::fmt )
 
@@ -27,6 +28,11 @@ add_executable( ${PROJECT_NAME} main.cpp )
 set_target_properties( ${PROJECT_NAME}
     PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin" 
+)
+
+target_link_libraries(
+    ${PROJECT_NAME}
+    Boost::thread
 )
 
 set_property( TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 17 )
