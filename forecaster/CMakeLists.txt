@@ -24,6 +24,11 @@ if( jaegertracing_FOUND )
     link_libraries( jaegertracing::jaegertracing-static )
 endif()
 
+find_program( CLANG_TIDY NAMES "clang-tidy" )
+if( CLANG_TIDY )
+	set(CMAKE_CXX_CLANG_TIDY clang-tidy -checks=-*,readability-*)
+endif()
+
 add_executable( ${PROJECT_NAME} main.cpp )
 set_target_properties( ${PROJECT_NAME}
     PROPERTIES
