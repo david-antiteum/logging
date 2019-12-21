@@ -102,10 +102,9 @@ private:
 		client.request( req ).then([this](http_response response){
 			if( response.status_code() == status_codes::OK ){
 				return response.extract_json();
-			}else{
-				mLogger->error( "Error accessing the symbol price. Nothing returned. Error: {}", response.status_code() );
-				return pplx::task_from_result(json::value());
 			}
+			mLogger->error( "Error accessing the symbol price. Nothing returned. Error: {}", response.status_code() );
+			return pplx::task_from_result(json::value());
 		}).then([ &res, this ](pplx::task<json::value> previousTask){
 			try{
 				const auto jsonRes = previousTask.get();
@@ -159,7 +158,7 @@ int main( int argc, char * argv[])
 
 	try{
 		const auto result = options.parse(argc, argv);
-		if( result.count( "help" )){
+		if( result.count( "help" ) > 0 ){
 			std::cout << options.help({ "", "Group" }) << std::endl;
 			exit(0);
 		}
