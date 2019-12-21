@@ -105,7 +105,7 @@ int main( int argc, char * argv[])
 
 	try{
 		const auto result = options.parse(argc, argv);
-		if( result.count( "help" )){
+		if( result.count( "help" ) > 0 ){
 			std::cout << options.help({ "", "Group" }) << std::endl;
 			exit(0);
 		}
