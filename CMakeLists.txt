@@ -6,6 +6,12 @@ endif()
 add_compile_definitions( _SILENCE_ALL_CXX17_DEPRECATION_WARNINGS )
 
 project( Logging-Meeting )
+
+find_program( CLANG_TIDY NAMES "clang-tidy" )
+if( CLANG_TIDY )
+	set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY}" -checks=readability-*,cppcoreguidelines-*)
+endif()
+
 add_subdirectory( apigateway )
 add_subdirectory( forecaster )
 add_subdirectory( pricereader )
